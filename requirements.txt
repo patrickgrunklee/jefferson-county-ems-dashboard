@@ -1,0 +1,7 @@
+pandas>=2.0
+geopandas>=0.14
+plotly>=5.18
+dash>=2.14
+dash-leaflet>=1.0
+dash-extensions>=1.0
+openpyxl>=3.1

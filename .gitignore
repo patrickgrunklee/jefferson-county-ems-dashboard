@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Parquet cache (auto-generated at runtime)
+jeff_ems_cache/
+
+# Claude Code agent memory (not needed to run dashboard)
+.claude/
+
+# MABAS asset files (reference only — data is embedded in app)
+MABAS_Assets/
