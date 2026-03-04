@@ -9,7 +9,7 @@ Data sources (all live-linked, no baked-in HTML):
   - jefferson_county.geojson  (Census TIGER 2023 boundaries)
 """
 
-import os, json, math, hashlib, tempfile, time as _time
+import os, json, math, hashlib, tempfile, time as _time, copy
 import pandas as pd
 import geopandas as gpd
 import plotly.graph_objects as go
@@ -29,6 +29,7 @@ GEOJSON_EMS   = os.path.join(BASE, "jefferson_ems_districts.geojson")
 GEOJSON_FIRE  = os.path.join(BASE, "jefferson_fire_districts.geojson")
 GEOJSON_STATIONS = os.path.join(BASE, "jefferson_stations.geojson")
 GEOJSON_HELEN = os.path.join(BASE, "jefferson_helenville_responders.geojson")
+GEOJSON_ZCTA  = os.path.join(BASE, "jefferson_zcta.geojson")
 CONTRACT_XL = os.path.join(BASE, "ISyE Project", "Data and Resources",
                            "EMS Contract Details for all Towns in Jefferson County.xlsx")
 _CACHE_DIR = os.path.join(tempfile.gettempdir(), "jeff_ems_cache")
@@ -277,6 +278,22 @@ billing = pd.DataFrame([
     {"Municipality": "Fort Atkinson", "BLS": 1500, "ALS1": 1700, "ALS2": 1900, "Mileage": 26},
     {"Municipality": "Watertown",     "BLS": 1100, "ALS1": 1300, "ALS2": 1500, "Mileage": 22},
 ])
+# WI peer municipality billing rates for benchmarking context (2025 published fee schedules).
+# Sources: municipal websites fetched Mar 2026. These are NOT Jefferson County departments.
+# Note: 11 of 14 Jefferson Co. depts do not publish rates online; these benchmarks provide
+# context for what "typical" WI rates look like. Rates are billed (list price), not collected.
+wi_billing_benchmarks = pd.DataFrame([
+    {"Municipality": "Waukesha",        "BLS": 2100, "ALS1": 2200, "ALS2": 2400, "Mileage": 25,
+     "Source": "waukesha-wi.gov (eff. Jan 2023)", "Note": "Soft billing — residents not charged after insurance"},
+    {"Municipality": "Fitch-Rona",      "BLS": 1693, "ALS1": 1693, "ALS2": None, "Mileage": 26,
+     "Source": "fitchronaems.com (2026 schedule)", "Note": "Combined BLS/ALS rate; non-res $1,812"},
+    {"Municipality": "Madison",         "BLS": 1410, "ALS1": 1410, "ALS2": None, "Mileage": 16,
+     "Source": "cityofmadison.com (2022-2026)", "Note": "Flat rate, no BLS/ALS distinction"},
+    {"Municipality": "Richfield",       "BLS":  700, "ALS1":  850, "ALS2": 1100, "Mileage": 19,
+     "Source": "richfieldwi.gov (eff. Jan 2025)", "Note": "Volunteer dept; non-res +$100-150"},
+    {"Municipality": "Brookfield",      "BLS": 1500, "ALS1": None, "ALS2": None, "Mileage": None,
+     "Source": "ci.brookfield.wi.us (2025)", "Note": "Suburban benchmark (prior research)"},
+])
 
 # ── ALS/BLS service level by department (from web research Mar 2026) ──────────
 # Sources: department websites, Wisconsin EMS Association, NPI profiles, news reports.
@@ -483,6 +500,8 @@ with open(GEOJSON_STATIONS) as f:
     geojson_stations = json.load(f)
 with open(GEOJSON_HELEN) as f:
     geojson_helenville = json.load(f)
+with open(GEOJSON_ZCTA) as f:
+    geojson_zcta = json.load(f)
 
 kpi_lookup = muni_kpi.set_index("Municipality").to_dict("index")
 rt_lookup  = rt_pct.set_index("Municipality").to_dict("index")
@@ -502,6 +521,7 @@ for dept, namelsads in DEPT_TO_NAMELSAD.items():
 
 budget_lookup  = budget.set_index("Municipality").to_dict("index")
 billing_lookup = billing.set_index("Municipality").to_dict("index")
+asset_lookup   = ASSET_DATA.set_index("Municipality").to_dict("index")
 
 for feat in geojson_data["features"]:
     p        = feat["properties"]
@@ -524,6 +544,42 @@ for feat in geojson_data["features"]:
     p["ems_revenue"] = f"${bud['EMS_Revenue']:,.0f}" if bud.get("EMS_Revenue") is not None and bud.get("EMS_Revenue") == bud.get("EMS_Revenue") else "N/A"
     p["bls_rate"]    = f"${bil['BLS']:,}" if bil.get("BLS") else "N/A"
     p["als1_rate"]   = f"${bil['ALS1']:,}" if bil.get("ALS1") else "N/A"
+    _a = asset_lookup.get(dept, {})
+    p["ambulances"]    = _a.get("Ambulances", 0) or 0
+    p["ems_personnel"] = _a.get("EMS_Personnel", 0) or 0
+    p["service_level"] = ALS_LEVELS.get(dept, {}).get("Level", "N/A")
+
+# Precompute bounding boxes per department (for click-to-zoom & zoom-to-fit)
+DEPT_BOUNDS = {}  # {dept_name: [[south, west], [north, east]]}
+for _feat in geojson_data["features"]:
+    _dept = _feat["properties"].get("dept", _feat["properties"]["NAME"])
+    _coords = []
+    _geom = _feat["geometry"]
+    if _geom["type"] == "Polygon":
+        for ring in _geom["coordinates"]:
+            _coords.extend(ring)
+    elif _geom["type"] == "MultiPolygon":
+        for poly in _geom["coordinates"]:
+            for ring in poly:
+                _coords.extend(ring)
+    if not _coords:
+        continue
+    lons = [c[0] for c in _coords]
+    lats = [c[1] for c in _coords]
+    _sw = [min(lats), min(lons)]
+    _ne = [max(lats), max(lons)]
+    if _dept in DEPT_BOUNDS:
+        old_sw, old_ne = DEPT_BOUNDS[_dept]
+        DEPT_BOUNDS[_dept] = [
+            [min(old_sw[0], _sw[0]), min(old_sw[1], _sw[1])],
+            [max(old_ne[0], _ne[0]), max(old_ne[1], _ne[1])],
+        ]
+    else:
+        DEPT_BOUNDS[_dept] = [_sw, _ne]
+
+_ALL_SW = [min(b[0][0] for b in DEPT_BOUNDS.values()), min(b[0][1] for b in DEPT_BOUNDS.values())]
+_ALL_NE = [max(b[1][0] for b in DEPT_BOUNDS.values()), max(b[1][1] for b in DEPT_BOUNDS.values())]
+COUNTY_BOUNDS = [_ALL_SW, _ALL_NE]
 
 # ── 5b. Station / service-area coordinates for map markers ────────────────────
 # Geocoded from actual fire station addresses (Nominatim OSM, verified 2025-03).
@@ -547,21 +603,41 @@ STATION_COORDS = {
 }
 dept_centroids = STATION_COORDS  # alias for any downstream references
 
+# Fixup: depts without GeoJSON polygons get a small box around their station
+for _d, (_lat, _lon) in STATION_COORDS.items():
+    if _d not in DEPT_BOUNDS:
+        DEPT_BOUNDS[_d] = [[_lat - 0.04, _lon - 0.05], [_lat + 0.04, _lon + 0.05]]
+
 # ── 5c. ZIP and City coordinate lookups + aggregation for zoom tiers ─────────
 
+# Census 2020 ZCTA internal-point coordinates (52 ZIPs in Jefferson County area)
 ZIP_COORDS = {
-    "53066": (43.1073, -88.4813), "53538": (42.9213, -88.8465),
-    "53190": (42.8237, -88.7389), "53094": (43.1584, -88.7165),
-    "53534": (42.8365, -89.0614), "53098": (43.2205, -88.7057),
-    "53563": (42.7732, -88.9579), "53118": (42.9860, -88.4681),
-    "53594": (43.1830, -88.9778), "53038": (43.0738, -88.7798),
-    "53549": (42.9951, -88.7892), "53178": (43.0160, -88.5985),
-    "53523": (42.9934, -89.0132), "53036": (43.1876, -88.5492),
-    "53029": (43.1247, -88.3400), "53069": (43.1138, -88.4347),
-    "53156": (42.9037, -88.5793), "53058": (43.1075, -88.4077),
-    "53115": (42.6325, -88.6372), "53137": (42.9770, -88.6353),
-    "53047": (43.2575, -88.6273), "53511": (42.5248, -89.0335),
-    "53531": (43.0529, -89.0920), "53559": (43.1600, -89.0735),
+    "53003": (43.2123, -88.5196), "53016": (43.3111, -88.7177),
+    "53018": (43.0478, -88.386),  "53027": (43.3163, -88.3711),
+    "53029": (43.1466, -88.341),  "53036": (43.1797, -88.575),
+    "53038": (43.0846, -88.791),  "53039": (43.3698, -88.7095),
+    "53047": (43.2605, -88.6287), "53058": (43.1126, -88.4119),
+    "53059": (43.2885, -88.525),  "53066": (43.1146, -88.4887),
+    "53069": (43.1136, -88.4317), "53072": (43.08, -88.2666),
+    "53078": (43.3179, -88.4695), "53089": (43.1455, -88.2383),
+    "53094": (43.144, -88.732),   "53098": (43.2537, -88.7106),
+    "53103": (42.8805, -88.2173), "53114": (42.6094, -88.7459),
+    "53115": (42.6566, -88.6683), "53118": (42.9625, -88.4915),
+    "53119": (42.8931, -88.4856), "53121": (42.7197, -88.5343),
+    "53137": (43.0079, -88.6691), "53147": (42.5582, -88.4519),
+    "53149": (42.8775, -88.3423), "53153": (42.9409, -88.4021),
+    "53156": (42.8899, -88.5888), "53178": (43.0295, -88.5968),
+    "53189": (42.9441, -88.291),  "53190": (42.8078, -88.7362),
+    "53505": (42.6611, -88.8209), "53511": (42.5464, -89.1067),
+    "53523": (42.9844, -89.0288), "53525": (42.544, -88.8466),
+    "53531": (43.0624, -89.0884), "53534": (42.8608, -89.0933),
+    "53536": (42.7612, -89.2679), "53538": (42.9089, -88.8716),
+    "53545": (42.7387, -89.0402), "53546": (42.6522, -88.9482),
+    "53548": (42.6893, -89.1313), "53549": (42.9845, -88.7656),
+    "53551": (43.0795, -88.9161), "53559": (43.166, -89.0816),
+    "53563": (42.781, -88.9335),  "53579": (43.296, -88.8677),
+    "53589": (42.9248, -89.2059), "53594": (43.1833, -88.9712),
+    "53916": (43.456, -88.8485),  "53925": (43.3267, -89.0571),
 }
 
 CITY_COORDS = {
@@ -619,7 +695,7 @@ _zip_agg = _zip_agg.sort_values("total_calls", ascending=False).drop_duplicates(
 ZIP_DATA = []
 for _, r in _zip_agg.iterrows():
     z = r["ZIP"]
-    if z in ZIP_COORDS and r["total_calls"] >= 10:
+    if z in ZIP_COORDS and r["total_calls"] >= 3:
         lat, lon = ZIP_COORDS[z]
         ZIP_DATA.append({
             "zip": z, "dept": r["Department"], "lat": lat, "lon": lon,
@@ -652,15 +728,23 @@ print(f"  Zoom tiers: {len(CITY_DATA)} cities, {len(ZIP_DATA)} ZIPs")
 # ── 6. dash-leaflet map helpers ──────────────────────────────────────────────
 
 METRIC_META = {
-    "total_calls": {"label": "Total Calls",    "key": "Total Calls"},
-    "ems_calls":   {"label": "EMS Calls",       "key": "EMS Calls (Cat 3)"},
-    "median_rt":   {"label": "Median RT (min)", "key": "Median Response Time (min)"},
-    "p90_rt":      {"label": "P90 RT (min)",    "key": "P90"},
+    "total_calls":   {"label": "Total Calls",    "key": "Total Calls"},
+    "ems_calls":     {"label": "EMS Calls",       "key": "EMS Calls (Cat 3)"},
+    "median_rt":     {"label": "Median RT (min)", "key": "Median Response Time (min)"},
+    "p90_rt":        {"label": "P90 RT (min)",    "key": "P90"},
+    "ambulances":    {"label": "Ambulances",      "key": "Ambulances"},
+    "ems_personnel": {"label": "EMS Personnel",   "key": "EMS_Personnel"},
 }
 
 # Call-volume range for circle scaling
 _all_calls = {d: kpi_lookup.get(d, {}).get("Total Calls", 0) or 0 for d in STATION_COORDS}
 _max_calls = max(_all_calls.values()) if _all_calls else 1
+
+# Asset ranges for choropleth scaling
+_all_amb  = {d: asset_lookup.get(d, {}).get("Ambulances", 0) or 0 for d in STATION_COORDS}
+_max_amb  = max(_all_amb.values()) if _all_amb else 1
+_all_pers = {d: asset_lookup.get(d, {}).get("EMS_Personnel", 0) or 0 for d in STATION_COORDS}
+_max_pers = max(_all_pers.values()) if _all_pers else 1
 
 _MIN_MARKER_PX = 6
 _MAX_MARKER_PX = 28
@@ -693,17 +777,37 @@ def _bubble_color_rt(val):
     except (TypeError, ValueError):
         return "#aaaaaa"
 
+def _bubble_color_asset(val, max_val):
+    """Purple gradient for asset/personnel metrics (light→dark)."""
+    try:
+        t = min(1.0, float(val) / max_val) if max_val > 0 else 0
+        r = int(209 + (88 - 209) * t)
+        g = int(196 + (28 - 196) * t)
+        b = int(233 + (135 - 233) * t)
+        return f"rgb({r},{g},{b})"
+    except (TypeError, ValueError):
+        return "#aaaaaa"
+
 def _choropleth_color(dept, metric):
     """Return hex fill color for a GeoJSON polygon given the active metric."""
     kpi = kpi_lookup.get(dept, {})
     rtp = rt_lookup.get(dept, {})
+    ast = asset_lookup.get(dept, {})
     if metric in ("total_calls", "ems_calls"):
         val = kpi.get(METRIC_META[metric]["key"], 0) or 0
         return _bubble_color_calls(val)
-    else:
+    elif metric in ("median_rt", "p90_rt"):
         val = kpi.get("Median Response Time (min)", 0) if metric == "median_rt" else rtp.get("P90", 0)
         val = val or 0
         return _bubble_color_rt(val)
+    elif metric == "ambulances":
+        val = ast.get("Ambulances", 0) or 0
+        return _bubble_color_asset(val, _max_amb)
+    elif metric == "ems_personnel":
+        val = ast.get("EMS_Personnel", 0) or 0
+        return _bubble_color_asset(val, _max_pers)
+    else:
+        return "#aaaaaa"
 
 def _compute_color_map(metric):
     """Return {dept_name: color_string} for all departments."""
@@ -731,6 +835,88 @@ _fire_district_style = assign("""function(feature) {
 _helenville_style = assign("""function(feature) {
     return {fillColor: '#FFEB3B', color: '#FBC02D', weight: 2, fillOpacity: 0.22, dashArray: '4 3'};
 }""")
+_zcta_style_static = assign("""function(feature) {
+    return {fillColor: '#9C27B0', color: '#7B1FA2', weight: 1.5, fillOpacity: 0.10, dashArray: '5 3'};
+}""")
+_zcta_label = assign("""function(feature, layer) {
+    var z = feature.properties.ZCTA5 || '';
+    if (z) {
+        layer.bindTooltip(z, {permanent: true, direction: 'center',
+            className: 'zcta-label',
+            offset: [0, 0]});
+    }
+}""")
+# Dynamic ZCTA style: reads hideout.zipColorMap for metric-driven fill colors
+_zcta_style_dynamic = assign("""function(feature, context) {
+    var z = feature.properties.ZCTA5 || '';
+    var cm = (context.hideout || {}).zipColorMap || {};
+    var c = cm[z];
+    if (c) {
+        return {fillColor: c, color: 'rgba(123,31,162,0.5)', weight: 1, fillOpacity: 0.30, dashArray: ''};
+    }
+    return {fillColor: 'transparent', color: 'rgba(123,31,162,0.25)', weight: 0.5, fillOpacity: 0, dashArray: '4 3'};
+}""")
+# Dynamic ZCTA tooltip: only shown for ZIPs with data, kept minimal
+_zcta_label_dynamic = assign("""function(feature, layer) {
+    var p = feature.properties;
+    var z = p.ZCTA5 || '';
+    var calls = p._calls || 0;
+    if (calls > 0) {
+        var tip = '<b>' + z + '</b> &mdash; ' + calls + ' calls, ' + p._rt + ' min RT';
+        layer.bindTooltip(tip, {sticky: true, direction: 'top', opacity: 0.92});
+    }
+}""")
+
+def _build_zcta_data_geojson(zip_data_list, selected_depts):
+    """Inject call data into ZCTA GeoJSON feature properties for client-side tooltips."""
+    enriched = copy.deepcopy(geojson_zcta)
+    # Build lookup: zip -> data dict
+    zip_lookup = {}
+    for zd in zip_data_list:
+        if zd["dept"] in selected_depts:
+            zip_lookup[zd["zip"]] = zd
+    for feat in enriched["features"]:
+        z = feat["properties"].get("ZCTA5", "")
+        d = zip_lookup.get(z, {})
+        feat["properties"]["_calls"] = d.get("total_calls", 0)
+        feat["properties"]["_ems"] = d.get("ems_calls", 0)
+        feat["properties"]["_rt"] = d.get("median_rt", "N/A")
+        feat["properties"]["_dept"] = d.get("dept", "")
+    return enriched
+
+def _compute_zip_color_map(metric, zip_data_list, selected_depts):
+    """Return {zip_code: color_string} for all ZIPs with data."""
+    is_rt = "rt" in metric
+    is_asset = metric in ("ambulances", "ems_personnel")
+    filtered = [z for z in zip_data_list if z["dept"] in selected_depts and z["total_calls"] >= 3]
+    if not filtered:
+        return {}
+    local_max = max(z["total_calls"] for z in filtered)
+    result = {}
+    for zd in filtered:
+        z = zd["zip"]
+        if is_asset:
+            # Color ZIP boundaries by the parent department's asset value
+            ast_d = asset_lookup.get(zd["dept"], {})
+            asset_val = ast_d.get("Ambulances", 0) if metric == "ambulances" else ast_d.get("EMS_Personnel", 0)
+            asset_val = asset_val or 0
+            asset_max = _max_amb if metric == "ambulances" else _max_pers
+            result[z] = _bubble_color_asset(asset_val, asset_max)
+        elif is_rt:
+            val = zd.get("median_rt", 0)
+            try:
+                val = float(val)
+            except (TypeError, ValueError):
+                val = 0
+            result[z] = _bubble_color_rt(val)
+        else:
+            val = zd["total_calls"] if metric == "total_calls" else zd.get("ems_calls", 0)
+            t = min(1.0, float(val) / local_max) if local_max > 0 else 0
+            r = int(198 + (8 - 198) * t)
+            g = int(219 + (48 - 219) * t)
+            b = int(239 + (107 - 239) * t)
+            result[z] = f"rgb({r},{g},{b})"
+    return result
 
 # Pre-compute marker data list for the callback
 MARKER_DATA = []
@@ -753,6 +939,9 @@ def _build_popup_content(dept):
     rtp   = rt_lookup.get(dept, {})
     bud   = budget_lookup.get(dept, {})
     bil   = billing_lookup.get(dept, {})
+    ast   = asset_lookup.get(dept, {})
+    als_info = ALS_LEVELS.get(dept, {})
+    pop   = SERVICE_AREA_POP.get(dept)
     total = kpi.get("Total Calls", "N/A")
     ems   = kpi.get("EMS Calls (Cat 3)", "N/A")
     med   = kpi.get("Median Response Time (min)", "N/A")
@@ -770,6 +959,28 @@ def _build_popup_content(dept):
     miles = f"${bil['Mileage']}/mi" if bil.get("Mileage") else "N/A"
     pct   = f"{100*ems/total:.0f}%" if isinstance(ems,(int,float)) and isinstance(total,(int,float)) and total > 0 else "N/A"
 
+    # Asset & service level fields
+    svc_level  = als_info.get("Level", "N/A")
+    amb_count  = ast.get("Ambulances", "N/A")
+    ems_pers   = ast.get("EMS_Personnel", "N/A")
+    paramedics = ast.get("Paramedics", "N/A")
+    aemts      = ast.get("AEMTs", "N/A")
+    emts       = ast.get("EMTs", "N/A")
+    # Calls per ambulance (workload metric)
+    if isinstance(ems, (int, float)) and isinstance(amb_count, (int, float)) and amb_count > 0:
+        calls_per_amb = f"{ems / amb_count:,.0f}"
+    else:
+        calls_per_amb = "N/A"
+    # EMS personnel per 1K pop
+    if isinstance(ems_pers, (int, float)) and ems_pers > 0 and pop and pop > 0:
+        pers_per_1k = f"{ems_pers / pop * 1000:,.1f}"
+    else:
+        pers_per_1k = "N/A"
+
+    # Service level color badge
+    _svc_colors = {"ALS": "#10B981", "AEMT": "#F7C143", "BLS": "#D94133", "N/A": "#6B7280"}
+    svc_color = _svc_colors.get(svc_level, "#6B7280")
+
     _hdr = {"background": "#2E3238", "color": C_PRIMARY, "padding": "7px 12px",
             "fontWeight": "700", "fontSize": "14px", "borderRadius": "4px 4px 0 0"}
     _sec = {"background": "#1A1C1E", "padding": "3px 10px", "fontWeight": "600",
@@ -782,22 +993,40 @@ def _build_popup_content(dept):
         s = {**_td, **(_r1 if alt else {})}
         return html.Tr([html.Td(html.B(label), style=s), html.Td(str(value), style=s)])
 
+    def _row_badge(label, value, color, alt=False):
+        """Row with a colored badge for service level."""
+        s = {**_td, **(_r1 if alt else {})}
+        badge = html.Span(value, style={
+            "background": color, "color": "#fff", "padding": "1px 8px",
+            "borderRadius": "3px", "fontSize": "10px", "fontWeight": "700",
+        })
+        return html.Tr([html.Td(html.B(label), style=s), html.Td(badge, style=s)])
+
     return html.Div([
         html.Div(dept, style=_hdr),
         html.Div("CALL VOLUME", style=_sec),
-        html.Table([_row("Total Calls", total, True), _row("EMS Calls", f"{ems} ({pct})")],
+        html.Table([html.Tbody([_row("Total Calls", total, True), _row("EMS Calls", f"{ems} ({pct})")])],
                    style={"borderCollapse": "collapse", "width": "100%"}),
         html.Div("RESPONSE TIMES", style=_sec),
-        html.Table([_row("Median (all)", f"{med} min", True), _row("Median EMS", f"{ems_m} min"),
-                    _row("P75", f"{p75} min", True), _row("P90", f"{p90} min")],
+        html.Table([html.Tbody([_row("Median (all)", f"{med} min", True), _row("Median EMS", f"{ems_m} min"),
+                    _row("P75", f"{p75} min", True), _row("P90", f"{p90} min")])],
+                   style={"borderCollapse": "collapse", "width": "100%"}),
+        html.Div("ASSETS & SERVICE LEVEL", style=_sec),
+        html.Table([html.Tbody([_row_badge("Service Level", svc_level, svc_color, True),
+                    _row("Ambulances", amb_count),
+                    _row("EMS Calls / Amb", calls_per_amb, True),
+                    _row("EMS Personnel", ems_pers),
+                    _row("  Paramedics", paramedics, True),
+                    _row("  AEMTs / EMTs", f"{aemts} / {emts}"),
+                    _row("Per 1K Pop", pers_per_1k, True)])],
                    style={"borderCollapse": "collapse", "width": "100%"}),
         html.Div("STAFFING & BUDGET", style=_sec),
-        html.Table([_row("Model", model, True), _row("FT / PT Staff", f"{ft} FT / {pt} PT"),
-                    _row("Total Expense", exp, True), _row("EMS Revenue", rev)],
+        html.Table([html.Tbody([_row("Model", model, True), _row("FT / PT Staff", f"{ft} FT / {pt} PT"),
+                    _row("Total Expense", exp, True), _row("EMS Revenue", rev)])],
                    style={"borderCollapse": "collapse", "width": "100%"}),
         html.Div("BILLING RATES (2025)", style=_sec),
-        html.Table([_row("BLS", bls, True), _row("ALS-1", als1),
-                    _row("ALS-2", als2, True), _row("Mileage", miles)],
+        html.Table([html.Tbody([_row("BLS", bls, True), _row("ALS-1", als1),
+                    _row("ALS-2", als2, True), _row("Mileage", miles)])],
                    style={"borderCollapse": "collapse", "width": "100%"}),
     ], style={"fontFamily": "'Segoe UI',sans-serif", "minWidth": "220px", "maxWidth": "270px"})
 
@@ -1181,30 +1410,38 @@ _df_jeff_bayfield_compare = pd.DataFrame([
 # Source: savings_model.md 300-call table + utilization_analysis.md
 _df_cost_threshold = pd.DataFrame([
     # Palmyra: NFIRS data covers only 3 months (Jan-Mar). 35 calls extrapolated to ~140 annual.
-    {"Municipality": "Palmyra*",      "Cost_Per_Call":  5841, "Total_Calls":  140,  "Volume_Cat": "Below 300 (Critical)"},
-    {"Municipality": "Jefferson",     "Cost_Per_Call":  6304, "Total_Calls":  238,  "Volume_Cat": "Below 300 (Critical)"},
-    {"Municipality": "Waterloo",      "Cost_Per_Call":  2120, "Total_Calls":  520,  "Volume_Cat": "Above 500"},
-    {"Municipality": "Johnson Creek", "Cost_Per_Call":  1783, "Total_Calls":  636,  "Volume_Cat": "300–500 (Monitor)"},
-    {"Municipality": "Ixonia",        "Cost_Per_Call":  1867, "Total_Calls":  338,  "Volume_Cat": "300–500 (Monitor)"},
-    {"Municipality": "Whitewater",    "Cost_Per_Call":  1496, "Total_Calls": 1812,  "Volume_Cat": "Above 500"},
-    {"Municipality": "Watertown",     "Cost_Per_Call":  1410, "Total_Calls": 2719,  "Volume_Cat": "Above 500"},
-    {"Municipality": "Cambridge",     "Cost_Per_Call":   467, "Total_Calls":  197,  "Volume_Cat": "Below 300 (Critical)"},
-    {"Municipality": "Fort Atkinson", "Cost_Per_Call":   367, "Total_Calls": 2076,  "Volume_Cat": "Above 500"},
-    {"Municipality": "Edgerton",      "Cost_Per_Call":   285, "Total_Calls": 2472,  "Volume_Cat": "Above 500"},
+    {"Municipality": "Palmyra*",      "Cost_Per_Call":  5841, "Total_Calls":  140},
+    {"Municipality": "Jefferson",     "Cost_Per_Call":  6304, "Total_Calls":  238},
+    {"Municipality": "Waterloo",      "Cost_Per_Call":  2120, "Total_Calls":  520},
+    {"Municipality": "Johnson Creek", "Cost_Per_Call":  1783, "Total_Calls":  636},
+    {"Municipality": "Ixonia",        "Cost_Per_Call":  1867, "Total_Calls":  338},
+    {"Municipality": "Whitewater",    "Cost_Per_Call":  1496, "Total_Calls": 1812},
+    {"Municipality": "Watertown",     "Cost_Per_Call":  1410, "Total_Calls": 2719},
+    {"Municipality": "Cambridge",     "Cost_Per_Call":   467, "Total_Calls":  197},
+    {"Municipality": "Fort Atkinson", "Cost_Per_Call":   367, "Total_Calls": 2076},
+    {"Municipality": "Edgerton",      "Cost_Per_Call":   285, "Total_Calls": 2472},
 ])
+# Volume tiers from data quartiles
+_vol_p25 = _df_cost_threshold["Total_Calls"].quantile(0.25)
+_vol_p75 = _df_cost_threshold["Total_Calls"].quantile(0.75)
+_df_cost_threshold["Volume_Cat"] = _df_cost_threshold["Total_Calls"].apply(
+    lambda v: f"Below {_vol_p25:,.0f} (Bottom quartile)" if v < _vol_p25
+    else f"Above {_vol_p75:,.0f} (Top quartile)" if v > _vol_p75
+    else f"{_vol_p25:,.0f}\u2013{_vol_p75:,.0f} (Middle)"
+)
 # Sort descending by cost/call for horizontal bar
 _df_cost_threshold = _df_cost_threshold.sort_values("Cost_Per_Call", ascending=True).reset_index(drop=True)
 
-# Color map for volume categories
+# Color map for volume categories — dynamic keys from quartile labels
+_vol_cats = _df_cost_threshold["Volume_Cat"].unique()
 _VOL_COLOR_MAP = {
-    "Below 300 (Critical)": "#D94133",   # C_RED — terracotta
-    "300–500 (Monitor)":    "#F7C143",   # C_YELLOW — amber warning
-    "Above 500":            "#10B981",   # C_GREEN
+    c: "#D94133" if "Bottom" in c else "#10B981" if "Top" in c else "#F7C143"
+    for c in _vol_cats
 }
 _bar_colors_15a = [_VOL_COLOR_MAP[c] for c in _df_cost_threshold["Volume_Cat"]]
 
-_COUNTY_MEDIAN_15a = 1640   # Median cost/call (Whitewater/JC midpoint, corrected)
-_OUTLIER_THRESH_15a = 3280  # 2x county median
+_COUNTY_MEDIAN_15a = _df_cost_threshold["Cost_Per_Call"].median()
+_OUTLIER_THRESH_15a = _COUNTY_MEDIAN_15a * 2  # 2x county median
 
 @lru_cache(maxsize=1)
 def _get_fig_cost_threshold():
@@ -1228,7 +1465,7 @@ def _get_fig_cost_threshold():
     fig.add_vline(
         x=_COUNTY_MEDIAN_15a,
         line_dash="dash", line_color=C_MUTED,
-        annotation_text="County median $1,640",
+        annotation_text=f"County median ${_COUNTY_MEDIAN_15a:,.0f}",
         annotation_font_color=C_MUTED,
         annotation_font_size=11,
         annotation_position="top",
@@ -1236,7 +1473,7 @@ def _get_fig_cost_threshold():
     fig.add_vline(
         x=_OUTLIER_THRESH_15a,
         line_dash="dash", line_color=C_RED,
-        annotation_text="2x median outlier threshold $3,280",
+        annotation_text=f"2x median outlier ${_OUTLIER_THRESH_15a:,.0f}",
         annotation_font_color=C_RED,
         annotation_font_size=11,
         annotation_position="top",
@@ -1279,14 +1516,14 @@ def _get_fig_cost_threshold():
     return fig
 
 
-# 15b: 5% Savings Waterfall — grouped bar (Low/High side-by-side)
-# Source: savings_model.md Integrated 5% Savings Model
+# 15b: Cost Driver Magnitude — grouped bar (Low/High side-by-side)
+# Source: savings_model.md + utilization_analysis.md cost magnitude data
 _df_savings = pd.DataFrame([
-    {"Recommendation": "Watertown Billing Reform",           "Low_K": 400,  "High_K":  700, "Pending_Audit": False},
-    {"Recommendation": "Palmyra Consolidation",              "Low_K": 491,  "High_K":  572, "Pending_Audit": False},
-    {"Recommendation": "Cambridge Consolidation",            "Low_K":  55,  "High_K":   64, "Pending_Audit": False},
-    {"Recommendation": "Lake Mills Contract Renegotiation",  "Low_K":  70,  "High_K":  100, "Pending_Audit": False},
-    {"Recommendation": "Jefferson Restructure (if audited)", "Low_K": 900,  "High_K": 1050, "Pending_Audit": True},
+    {"Cost Driver": "Watertown Billing Rate Gap",                "Low_K": 400,  "High_K":  700, "Pending_Audit": False},
+    {"Cost Driver": "Palmyra Sub-Threshold Transport",           "Low_K": 491,  "High_K":  572, "Pending_Audit": False},
+    {"Cost Driver": "Cambridge Service Collapse",                "Low_K":  55,  "High_K":   64, "Pending_Audit": False},
+    {"Cost Driver": "Lake Mills Revenue Leakage",                "Low_K":  70,  "High_K":  100, "Pending_Audit": False},
+    {"Cost Driver": "Jefferson Cost/Call Disparity (if audited)","Low_K": 900,  "High_K": 1050, "Pending_Audit": True},
 ])
 
 _SAVINGS_TARGET_K = 680   # 5% of $13.6M county-wide budget
@@ -1311,7 +1548,7 @@ def _get_fig_savings():
     fig = go.Figure()
     fig.add_trace(go.Bar(
         name="Low Estimate",
-        x=_df_savings["Recommendation"],
+        x=_df_savings["Cost Driver"],
         y=_df_savings["Low_K"],
         marker_color=_savings_colors_low,
         text=[f"${v:,}K" for v in _df_savings["Low_K"]],
@@ -1320,7 +1557,7 @@ def _get_fig_savings():
     ))
     fig.add_trace(go.Bar(
         name="High Estimate",
-        x=_df_savings["Recommendation"],
+        x=_df_savings["Cost Driver"],
         y=_df_savings["High_K"],
         marker_color=_savings_colors_high,
         text=[f"${v:,}K" for v in _df_savings["High_K"]],
@@ -1330,7 +1567,7 @@ def _get_fig_savings():
     fig.add_hline(
         y=_SAVINGS_TARGET_K,
         line_dash="dash", line_color=C_RED, line_width=2,
-        annotation_text="5% Target: $680K",
+        annotation_text="5% of County EMS Budget ($680K) — Reference Line",
         annotation_font_color=C_RED,
         annotation_font_size=12,
         annotation_position="right",
@@ -1338,7 +1575,7 @@ def _get_fig_savings():
     fig.update_layout(
         title=dict(
             text=(
-                "Pathway to 5% Savings ($680K Target) — Recommendation Contributions"
+                "Estimated Annual Cost of Identified Inefficiencies by Department/Issue"
                 "<br><sup>Light gray bar = Jefferson City figures pending data audit  ·  All values in $K</sup>"
             ),
             font=dict(size=14),
@@ -1434,11 +1671,11 @@ _df_levy_elig = pd.DataFrame([
 _df_contract_network = pd.DataFrame([
     {
         "Provider":        "Fort Atkinson EMS",
-        "Service Area":    "Towns of Koshkonong, Jefferson (partial)",
+        "Service Area":    "Towns of Koshkonong (~$29K/yr), Jefferson (~$2.7K/yr)",
         "Service Type":    "ALS Transport",
-        "Payment Model":   "Per-capita ($7.22 + CPI-W)",
+        "Payment Model":   "Per-capita ($7.22 base + CPI-W, 2–6% cap)",
         "Contract Expires": "Dec 31, 2025",
-        "Status":          "EXPIRED — Renegotiating",
+        "Status":          "EXPIRED — No auto-renew; active renegotiation (Peterson cost model Dec 2025)",
     },
     {
         "Provider":        "City of Jefferson EMS",
@@ -1468,17 +1705,17 @@ _df_contract_network = pd.DataFrame([
         "Provider":        "Waterloo EMS",
         "Service Area":    "Town of Milford (portion)",
         "Service Type":    "AEMT Transport",
-        "Payment Model":   "Per-capita ($22–$26)",
+        "Payment Model":   "Per-capita ($18→$22→$26, escalating)",
         "Contract Expires": "Dec 31, 2025",
-        "Status":          "Auto-renewing (120-day opt-out)",
+        "Status":          "Likely auto-renewed 2026 at $26/cap (120-day opt-out deadline was Sept 2025)",
     },
     {
         "Provider":        "Ixonia Fire & EMS",
         "Service Area":    "Town of Watertown",
         "Service Type":    "Fire + EMS Combined",
-        "Payment Model":   "Formula (calls/pop/value — 1/3 each)",
+        "Payment Model":   "$49,169/yr flat (budget formula: calls/pop/value — ⅓ each)",
         "Contract Expires": "Dec 31, 2025",
-        "Status":          "Extension option to 2027",
+        "Status":          "Extension option to 2027 — unconfirmed",
     },
     {
         "Provider":        "Edgerton EFPD",
@@ -1570,57 +1807,151 @@ _df_self_vs_contract = pd.DataFrame([
     },
 ])
 
-# ── Section 17 Static Data: Hybrid Transition Roadmap ─────────────────────────
-# Source: contract_analysis.md §E + savings_model.md implementation timeline
+# ── NEW: Chief Peterson 24/7 ALS Cost Model ──────────────────────────────────
+# Source: 25-1210 JC EMS Workgroup Cost Projection.pdf (Chief Bruce Peterson, FAFD)
+_PETERSON_COST_MODEL = {
+    "labels": [
+        "Salaries", "Overtime", "Benefits", "WRS (Pension)",
+        "EMS Supplies", "Clothing", "Amb. Maint.", "Amb. Equip.",
+        "Insurance", "Equip. Maint.", "Training", "Admin",
+        "Total Operating",
+        "EMS Revenue",
+        "Net County Cost",
+    ],
+    "values": [
+        371697, 24894, 178466, 27761,
+        28000, 3000, 7000, 2000,
+        67500, 500, 1000, 5000,
+        0,        # total row
+        -466200,  # revenue offset
+        0,        # net total row
+    ],
+    "measures": [
+        "relative", "relative", "relative", "relative",
+        "relative", "relative", "relative", "relative",
+        "relative", "relative", "relative", "relative",
+        "total",
+        "relative",
+        "total",
+    ],
+    "notes": [
+        "3 Paramedics @ $64,332 + 3 EMT-A @ $59,567",
+        "130 hrs/employee/yr (FLSA + backfill)",
+        "45% of wages (FICA, Medicare, Unemployment, Health)",
+        "WRS employer contribution",
+        "$40/call x 700 calls",
+        "$500/employee x 6",
+        "2 ambulances",
+        "",
+        "Liability, Ambulance, WC, Umbrella",
+        "", "", "", "",
+        "700 calls x $666 avg collected",
+        "",
+    ],
+}
+
+# ── NEW: Contract Per-Capita Escalation ──────────────────────────────────────
+# Source: Jefferson City EMS contract 2024-2027; Waterloo fire and EMS contract;
+#         FA Ambulance contract 2023; Lake Mills / Ryan Brothers IGAs; Ixonia IGA
+_CONTRACT_ESCALATION = pd.DataFrame([
+    {"Contract": "Jefferson City -> 5 Towns", "Year": 2023, "Rate": 28.00, "Status": "Active"},
+    {"Contract": "Jefferson City -> 5 Towns", "Year": 2024, "Rate": 31.00, "Status": "Active"},
+    {"Contract": "Jefferson City -> 5 Towns", "Year": 2025, "Rate": 34.00, "Status": "Active"},
+    {"Contract": "Jefferson City -> 5 Towns", "Year": 2026, "Rate": 37.00, "Status": "Active"},
+    {"Contract": "Jefferson City -> 5 Towns", "Year": 2027, "Rate": 40.00, "Status": "Active"},
+    {"Contract": "Waterloo -> Milford",       "Year": 2023, "Rate": 18.00, "Status": "Auto-renewed"},
+    {"Contract": "Waterloo -> Milford",       "Year": 2024, "Rate": 22.00, "Status": "Auto-renewed"},
+    {"Contract": "Waterloo -> Milford",       "Year": 2025, "Rate": 26.00, "Status": "Auto-renewed"},
+    {"Contract": "Fort Atkinson -> Towns",    "Year": 2023, "Rate": 7.22, "Status": "EXPIRED"},
+    {"Contract": "Fort Atkinson -> Towns",    "Year": 2024, "Rate": 7.22, "Status": "EXPIRED"},
+    {"Contract": "Fort Atkinson -> Towns",    "Year": 2025, "Rate": 7.22, "Status": "EXPIRED"},
+    {"Contract": "Lake Mills / Ryan Bros",    "Year": 2024, "Rate": 48.00, "Status": "Active"},
+    {"Contract": "Lake Mills / Ryan Bros",    "Year": 2025, "Rate": 49.44, "Status": "Active"},
+    {"Contract": "Ixonia -> Watertown Twp",   "Year": 2025, "Rate": 44.10, "Status": "Expired (1-yr)"},
+])
+
+# ── NEW: Contract Expiration Timeline ────────────────────────────────────────
+# Source: IGA contract text files (contract_analysis.md)
+_CONTRACT_TIMELINE = pd.DataFrame([
+    {"Contract": "Fort Atkinson -> Koshkonong",    "Start": "2023-01-01", "End": "2025-12-31", "Status": "EXPIRED"},
+    {"Contract": "Fort Atkinson -> Jefferson Twp", "Start": "2023-01-01", "End": "2025-12-31", "Status": "EXPIRED"},
+    {"Contract": "Oakland Amendment (expanded)",   "Start": "2025-01-01", "End": "2025-12-31", "Status": "EXPIRED"},
+    {"Contract": "Ixonia -> Town of Watertown",    "Start": "2025-01-01", "End": "2025-12-31", "Status": "EXPIRED"},
+    {"Contract": "Waterloo -> Town of Milford",    "Start": "2023-01-01", "End": "2026-12-31", "Status": "Auto-renewed"},
+    {"Contract": "Edgerton -> Koshkonong (sliver)", "Start": "2023-01-01", "End": "2026-12-31", "Status": "Auto-renewed"},
+    {"Contract": "Jefferson City -> 5 Towns",      "Start": "2024-01-01", "End": "2027-12-31", "Status": "Active"},
+    {"Contract": "Johnson Creek -> 4 Townships",   "Start": "2024-01-01", "End": "2028-12-31", "Status": "Active"},
+    {"Contract": "Lake Mills / Ryan Brothers",     "Start": "2024-01-01", "End": "2027-01-01", "Status": "Active (rolling 3-yr)"},
+])
+_CONTRACT_TIMELINE["Start"] = pd.to_datetime(_CONTRACT_TIMELINE["Start"])
+_CONTRACT_TIMELINE["End"]   = pd.to_datetime(_CONTRACT_TIMELINE["End"])
+
+# ── NEW: Ambulance Replacement Priority ──────────────────────────────────────
+# Source: 2025 CIP documents, NFIRS apparatus records, 15-yr end-of-life standard
+_AMBULANCE_REPLACE_PRIORITY = pd.DataFrame([
+    {"Department": "Fort Atkinson", "Unit": "Rescue 8157", "Year": 2004, "Age": 21,
+     "Risk": "CRITICAL", "Note": "6 yrs past 15-yr end-of-life", "CIP": "None on file"},
+    {"Department": "Waterloo",      "Unit": "Rescue 3959", "Year": 2005, "Age": 20,
+     "Risk": "CRITICAL", "Note": "5 yrs past 15-yr end-of-life", "CIP": "CIP 2025-2029 approved"},
+    {"Department": "Watertown",     "Unit": "Med 52/4152", "Year": 2006, "Age": 19,
+     "Risk": "HIGH",     "Note": "4 yrs past 15-yr end-of-life", "CIP": "None on file"},
+    {"Department": "Jefferson",     "Unit": "Rescue 756",  "Year": 2007, "Age": 18,
+     "Risk": "HIGH",     "Note": "3 yrs past 15-yr end-of-life", "CIP": "None on file"},
+    {"Department": "Ixonia",        "Unit": "8351",        "Year": 2012, "Age": 13,
+     "Risk": "MONITOR",  "Note": "Single-unit dept -- no backup if out of service", "CIP": "None on file"},
+])
+
+# ── Section 17 Static Data: Contract Windows & Structural Opportunities ───────
+# Source: contract_analysis.md §B-D + savings_model.md cost magnitude data
 
 _df_transition_roadmap = pd.DataFrame([
     {
-        "Phase":             "Phase 1",
+        "Window":            "Near-term",
         "Timeline":          "0–6 months (Spring 2026)",
-        "Action":            "Renegotiate Fort Atkinson expired contracts with county-wide hybrid language; Palmyra transport negotiation with FA or Western Lakes",
+        "Observable Opportunity": "Fort Atkinson contracts expired Dec 31, 2025 — county-wide clause enables renegotiation; Palmyra transport at $5,841/call on 140 est. calls/yr",
         "Key Departments":   "Fort Atkinson, Palmyra",
-        "Estimated Impact":  "$491K–$572K savings (Palmyra consolidation)",
-        "Dependencies":      "FA contracts already expired; county-wide clause triggers on county resolution",
+        "Scale of Identified Inefficiency": "$491K–$572K (Palmyra fixed-cost transport below viability threshold)",
+        "Structural Context":      "FA contracts already expired; county-wide clause triggers on county resolution",
     },
     {
-        "Phase":             "Phase 1",
+        "Window":            "Near-term",
         "Timeline":          "0–6 months (Spring 2026)",
-        "Action":            "Watertown billing rate review + EMS Fund proposal (increase BLS from $1,100 to ~$1,500)",
+        "Observable Opportunity": "Watertown BLS rate ($1,100) is lowest in county vs. FA ($1,500) and Jefferson ($1,900) — billing rate misalignment",
         "Key Departments":   "Watertown",
-        "Estimated Impact":  "$400K–$700K new revenue",
-        "Dependencies":      "Budget cycle 2026; Watertown Council approval",
+        "Scale of Identified Inefficiency": "$400K–$700K annual revenue gap vs. peer rates",
+        "Structural Context": "Budget cycle 2026; rate comparison data available",
     },
     {
-        "Phase":             "Phase 1",
+        "Window":            "Near-term",
         "Timeline":          "0–6 months (Fall 2026)",
-        "Action":            "County Board resolution for 66.0602(3)(e)6 countywide EMS levy",
+        "Observable Opportunity": "County qualifies for 66.0602(3)(e)6 EMS levy exception but has never utilized it",
         "Key Departments":   "County-wide",
-        "Estimated Impact":  "$504K–$610K annual levy (above cap)",
-        "Dependencies":      "Board resolution + Lafayette Co. precedent",
+        "Scale of Identified Inefficiency": "$504K–$610K annual levy capacity (unused statutory path)",
+        "Structural Context": "Lafayette County precedent (Resolution 26-23) exists",
     },
     {
-        "Phase":             "Phase 2",
+        "Window":            "Medium-term",
         "Timeline":          "6–12 months (2026–2027)",
-        "Action":            "Jefferson City NFIRS vs. CAD cross-validation; begin Lake Mills/Ryan Brothers exit notice",
+        "Observable Opportunity": "Jefferson City: 91 EMS calls on $1.5M budget may be NFIRS undercount; Lake Mills pays $347K but captures only $8K in revenue",
         "Key Departments":   "Jefferson, Lake Mills",
-        "Estimated Impact":  "TBD (Jefferson); $70K–$100K (Lake Mills)",
-        "Dependencies":      "Data audit for Jefferson; 180-day notice for Ryan Brothers",
+        "Scale of Identified Inefficiency": "TBD (Jefferson pending audit); $70K–$100K (Lake Mills revenue leakage)",
+        "Structural Context": "Data audit needed for Jefferson; 180-day notice window for Ryan Brothers",
     },
     {
-        "Phase":             "Phase 3",
+        "Window":            "Medium-term",
         "Timeline":          "12–24 months (2027–2028)",
-        "Action":            "Transition Jefferson City 5 townships at contract expiration (Dec 31, 2027); new county-level IGAs",
+        "Observable Opportunity": "All 5 Jefferson City township IGAs expire Dec 31, 2027 — exclusivity clause prevents earlier structural change",
         "Key Departments":   "Jefferson City district",
-        "Estimated Impact":  "$900K–$1.05M if audit confirms",
-        "Dependencies":      "Exclusivity clause expires; no financial penalty",
+        "Scale of Identified Inefficiency": "$900K–$1.05M if data audit confirms cost/call disparity",
+        "Structural Context": "Exclusivity clause expires naturally; no financial penalty at term end",
     },
     {
-        "Phase":             "Phase 4",
+        "Window":            "Long-term",
         "Timeline":          "24–36 months (2028–2029)",
-        "Action":            "Johnson Creek JCFD fire/EMS disaggregation at contract expiration (Dec 31, 2028)",
+        "Observable Opportunity": "JCFD fire/EMS contract expires Dec 31, 2028 — bundled structure prevents independent EMS cost analysis",
         "Key Departments":   "JCFD, 4 townships",
-        "Estimated Impact":  "TBD",
-        "Dependencies":      "Fire vs. EMS cost separation required",
+        "Scale of Identified Inefficiency": "TBD (fire vs. EMS cost separation needed first)",
+        "Structural Context": "Fire vs. EMS disaggregation is prerequisite for analysis",
     },
 ])
 
@@ -1736,11 +2067,15 @@ _df_cc_recovery_raw = pd.DataFrame([
 _df_cc_recovery_sorted = _df_cc_recovery_raw.sort_values("Rate", ascending=True).reset_index(drop=True)
 _CC_RECOVERY_AGG = 26.8
 
+_cc_rate_q = _df_cc_recovery_raw.loc[
+    ~_df_cc_recovery_raw["Type"].isin(["No Data", "Portage Benchmark"]), "Rate"
+].quantile([0.25, 0.75])
+
 def _cc_bar_color(row):
     if row["Type"] == "No Data":           return "#5C5C5C"
     if row["Type"] == "Portage Benchmark": return "#A78BFA"
-    if row["Rate"] >= 80:                  return C_GREEN
-    if row["Rate"] >= 40:                  return C_PRIMARY
+    if row["Rate"] >= _cc_rate_q[0.75]:    return C_GREEN
+    if row["Rate"] >= _cc_rate_q[0.25]:    return C_PRIMARY
     return C_ORANGE
 
 @lru_cache(maxsize=1)
@@ -1969,10 +2304,12 @@ app.layout = html.Div([
             dcc.RadioItems(
                 id="map-metric",
                 options=[
-                    {"label": "Total Calls",  "value": "total_calls"},
-                    {"label": "EMS Calls",    "value": "ems_calls"},
-                    {"label": "Median RT",    "value": "median_rt"},
-                    {"label": "P90 RT",       "value": "p90_rt"},
+                    {"label": "Total Calls",    "value": "total_calls"},
+                    {"label": "EMS Calls",      "value": "ems_calls"},
+                    {"label": "Median RT",      "value": "median_rt"},
+                    {"label": "P90 RT",         "value": "p90_rt"},
+                    {"label": "Ambulances",     "value": "ambulances"},
+                    {"label": "EMS Personnel",  "value": "ems_personnel"},
                 ],
                 value="total_calls",
                 labelStyle={
@@ -1998,6 +2335,7 @@ app.layout = html.Div([
                     {"label": "Fire Districts",  "value": "fire"},
                     {"label": "Stations (FD/PD/EMS)", "value": "stations"},
                     {"label": "Helenville 1st Resp.", "value": "helenville"},
+                    {"label": "ZIP Code Boundaries", "value": "zcta"},
                 ],
                 value=[],
                 labelStyle={
@@ -2159,12 +2497,14 @@ def render_tab(tab):
                                 attribution='&copy; OpenStreetMap &copy; CARTO'),
                             dl.GeoJSON(id="map-geojson", data=geojson_data,
                                 options=dict(style=_geojson_style),
+                                zoomToBoundsOnClick=True,
                                 hideout={"colorMap": _compute_color_map("total_calls")},
                                 hoverStyle={"weight": 3, "color": C_PRIMARY, "fillOpacity": 0.6}),
                             dl.LayerGroup(id="map-layer-ems", children=[]),
                             dl.LayerGroup(id="map-layer-fire", children=[]),
                             dl.LayerGroup(id="map-layer-stations", children=[]),
                             dl.LayerGroup(id="map-layer-helenville", children=[]),
+                            dl.LayerGroup(id="map-layer-zcta", children=[]),
                             dl.LayerGroup(id="map-markers"),
                         ]),
                     html.Div(id="zoom-badge", children="Department View", style={
@@ -2316,26 +2656,88 @@ def render_tab(tab):
         ])
 
     elif tab == "tab-finance":
+        # Cache the result once so all 4 figures come from the same lru_cache call.
+        _bf = _get_budget_figs()
+        # Shared graph config: hide mode bar to reclaim top-right space; respond to
+        # container resize so side-by-side charts fill their flex cells equally.
+        _g_cfg = {"displayModeBar": False, "responsive": True}
+        # flex: "1 1 0" + minWidth: 0 prevents flexbox overflow on narrow screens.
+        _g_style = {"flex": "1 1 0", "minWidth": 0}
         return html.Div([
             html.Div([
                 _section_header("Budget & Billing Rates — FY2025 Budget"),
+                # Sankey diagram — full width
+                dcc.Graph(id="budget-bar", figure=_bf[0], config=_g_cfg),
+                # Funding gap breakdown — chart + explanation table
+                dcc.Graph(id="funding-gap-bar", figure=_bf[4], config=_g_cfg),
+                dash_table.DataTable(
+                    id="funding-gap-table",
+                    columns=[
+                        {"name": "Department",       "id": "Department"},
+                        {"name": "Gap Amount",       "id": "Gap Amount"},
+                        {"name": "How They Cover It", "id": "How They Cover It"},
+                    ],
+                    data=_bf[5],
+                    style_table={"overflowX": "auto", "marginTop": "-8px",
+                                 "marginBottom": "24px"},
+                    style_header={
+                        "backgroundColor": "#2A2D31", "color": "#E0E0E0",
+                        "fontWeight": "bold", "border": "1px solid #444",
+                        "textAlign": "left", "padding": "8px 12px",
+                    },
+                    style_cell={
+                        "backgroundColor": "#1E2024", "color": "#CCCCCC",
+                        "border": "1px solid #333", "textAlign": "left",
+                        "padding": "8px 12px", "fontSize": "13px",
+                        "whiteSpace": "normal", "height": "auto",
+                        "fontFamily": "Segoe UI, Roboto, sans-serif",
+                    },
+                    style_data_conditional=[
+                        {"if": {"column_id": "Gap Amount"},
+                         "fontWeight": "bold", "color": C_YELLOW,
+                         "textAlign": "right", "width": "120px"},
+                        {"if": {"column_id": "Department"},
+                         "width": "130px"},
+                    ],
+                ),
+                # Billing rates chart
+                dcc.Graph(id="billing-bar", figure=_bf[1], config=_g_cfg),
+                # Row 2: Cost per call (10 depts, model-colored) + Expense per capita (10 depts).
+                # Both figures are height=540.
                 html.Div([
-                    dcc.Graph(id="budget-bar", figure=_get_budget_figs()[0], style={"flex": "1"}),
-                    dcc.Graph(id="billing-bar", figure=_get_budget_figs()[1], style={"flex": "1"}),
-                ], style={"display": "flex", "gap": "16px"}),
-                html.Div([
-                    dcc.Graph(id="cost-per-call-bar", figure=_get_budget_figs()[2], style={"flex": "1"}),
-                    dcc.Graph(id="expense-per-capita-bar", figure=_get_budget_figs()[3], style={"flex": "1"}),
-                ], style={"display": "flex", "gap": "16px"}),
+                    dcc.Graph(id="cost-per-call-bar",      figure=_bf[2],
+                              config=_g_cfg, style=_g_style),
+                    dcc.Graph(id="expense-per-capita-bar", figure=_bf[3],
+                              config=_g_cfg, style=_g_style),
+                ], style={"display": "flex", "gap": "16px", "alignItems": "flex-start"}),
                 _source_citation(
                     "FY2025 municipal budget documents (11 municipalities)",
-                    "2025 fee schedules — Jefferson, Fort Atkinson, Watertown (confirmed)",
+                    "2025 fee schedules — Jefferson, Fort Atkinson, Watertown (confirmed); "
+                    "11 of 14 depts do not publish rates (web search Mar 2026 — see methodology note below)",
+                    "WI peer benchmarks: Waukesha (waukesha-wi.gov), Fitch-Rona (fitchronaems.com), "
+                    "Madison (cityofmadison.com), Richfield (richfieldwi.gov), Brookfield (ci.brookfield.wi.us)",
                     "2024 NFIRS call volumes for cost-per-call calculation",
                     ("Census Reporter — Jefferson Co.", "https://censusreporter.org/profiles/05000US55055-jefferson-county-wi/"),
                     ("data.census.gov — ACS 2020-2024 (service area populations)", "https://data.census.gov"),
                     ("WI DOA 2025 Municipal Estimates", "https://doa.wi.gov/DIR/Final_Ests_Muni_2025.xlsx"),
                     ("Northwestern EMS — WI avg EMS user fee $36/capita", "https://northwesternems.org/ems-in-wisconsin"),
                 ),
+                html.Div([
+                    html.Span("Billing Rate Data Gap — ", style={
+                        "fontWeight": "700", "color": C_YELLOW, "fontSize": "11px",
+                        "fontFamily": FONT_STACK}),
+                    html.Span(
+                        "Systematic web search (Mar 2026) for all 11 missing Jefferson Co. dept billing rates "
+                        "returned zero results — small WI fire departments do not publish fee schedules online. "
+                        "Municipal fee schedules, board minutes, budget documents, and statewide surveys were "
+                        "checked for each department individually. No WI statewide EMS billing rate database exists. "
+                        "Next approach: request rates directly from fire chiefs at the March 11 Working Group meeting, "
+                        "or submit batch Open Records requests to each department. "
+                        "EMS|MC (shared billing vendor for several depts) may also have consolidated rate data: (800) 849-5603.",
+                        style={"color": C_MUTED, "fontSize": "11px", "fontFamily": FONT_STACK}),
+                ], style={"marginTop": "12px", "padding": "8px 12px",
+                          "backgroundColor": "#2A2000", "borderRadius": "6px",
+                          "border": f"1px solid {C_YELLOW}33"}),
             ], style=CARD),
             html.Div([
                 _section_header("Inter-Municipal EMS Contract Payments"),
@@ -2371,10 +2773,13 @@ def render_tab(tab):
                         "fontWeight": "700", "color": C_YELLOW, "fontSize": "11px",
                         "fontFamily": FONT_STACK}),
                     html.Span(
-                        "Missing contracts: Cambridge, Ixonia, Palmyra, Whitewater, Western Lakes "
-                        "(no IGAs found in file base). Missing per-capita dollar totals for Jefferson "
-                        "(5 towns — need population figures to calculate). Fort Atkinson & Waterloo "
-                        "contracts expire Dec 2025 — renewal terms unknown.",
+                        "Missing contracts: Cambridge, Palmyra, Whitewater, Western Lakes "
+                        "(no IGAs in file base — Open Records requests needed). "
+                        "Ixonia IGA found ($49,169/yr to Town of Watertown; extension to 2027 unconfirmed). "
+                        "Fort Atkinson contracts EXPIRED Dec 2025 (no auto-renew; active renegotiation). "
+                        "Waterloo likely auto-renewed 2026 at $26/capita. "
+                        "Billing rates: 11 of 14 depts unpublished — not available via web search; "
+                        "recommend direct request at Working Group meeting or batch Open Records.",
                         style={"color": C_MUTED, "fontSize": "11px", "fontFamily": FONT_STACK}),
                 ], style={"marginTop": "12px", "padding": "8px 12px",
                           "backgroundColor": "#2A2000", "borderRadius": "6px",
@@ -2433,9 +2838,13 @@ def render_tab(tab):
                         html.Div("Outlier Scorecard", style={
                             "fontSize": "0.9rem", "fontWeight": "700",
                             "color": C_RED, "marginBottom": "6px", "fontFamily": FONT_STACK}),
-                        html.P("Departments flagged on 2+ simultaneous metrics.",
+                        html.P("Departments flagged on 2 or more metrics that fall in the "
+                               "worst quartile (75th percentile for cost/tax, 25th for "
+                               "volume/recovery/staffing). Thresholds are data-driven "
+                               "and adapt to the county distribution.",
                             style={"fontSize": "0.78rem", "color": C_MUTED,
-                                   "margin": "0 0 10px", "fontFamily": FONT_STACK}),
+                                   "margin": "0 0 10px", "fontFamily": FONT_STACK,
+                                   "lineHeight": "1.5"}),
                         dash_table.DataTable(
                             id="util-outlier-table",
                             data=_get_utilization_figs()[5],
@@ -2447,28 +2856,33 @@ def render_tab(tab):
                                         "whiteSpace": "normal", "height": "auto"},
                             style_data_conditional=[
                                 {"if": {"row_index": "odd"}, "backgroundColor": "#2E2020"},
-                                {"if": {"filter_query": "{Flags} >= 3"},
+                                {"if": {"filter_query": "{# Flags} >= 3"},
                                  "backgroundColor": "#3A1A1A", "fontWeight": "600"}]),
                     ], style={"flex": "1.2"}),
                     html.Div([
-                        html.Div("Strategic Recommendations", style={
+                        html.Div("How to Read This Table", style={
                             "fontSize": "0.9rem", "fontWeight": "700", "color": C_PRIMARY,
                             "marginBottom": "10px", "borderLeft": f"4px solid {C_PRIMARY}",
                             "paddingLeft": "10px", "fontFamily": FONT_STACK}),
-                        html.Ol([
-                            html.Li([html.B("Palmyra: "), "Consolidation review. ",
-                                html.Span("Est. savings: $300K-$500K/yr", style={"color": C_GREEN, "fontWeight": "700"})],
+                        html.Ul([
+                            html.Li([html.B("# Flags: "),
+                                "Count of metrics where the department falls in the worst quartile. "
+                                "More flags = more areas of concern."],
                                 style={"marginBottom": "8px"}),
-                            html.Li([html.B("Jefferson City: "), "Data audit then restructure. ",
-                                html.Span("Est. savings: $400K-$700K/yr", style={"color": C_GREEN, "fontWeight": "700"})],
+                            html.Li([html.B("Why Flagged: "),
+                                "Lists each triggered metric with its threshold. "
+                                "E.g., 'Cost/call > $X (75th pctl)' means the dept's cost per call "
+                                "exceeds 75% of peers in the county."],
                                 style={"marginBottom": "8px"}),
-                            html.Li([html.B("Watertown: "), "Billing rate reform + EMS fund. ",
-                                html.Span("Est. revenue: $400K-$700K/yr", style={"color": C_GREEN, "fontWeight": "700"})],
+                            html.Li([html.B("Cost/Call vs Tax/Call: "),
+                                "High cost/call means high total spending per incident. "
+                                "High tax/call means taxpayers bear most of that cost "
+                                "(low billing revenue offset)."],
                                 style={"marginBottom": "8px"}),
-                            html.Li([html.B("Lake Mills: "), "Ryan Brothers revenue-sharing. ",
-                                html.Span("Est. savings: $70K-$100K/yr", style={"color": C_GREEN, "fontWeight": "700"})],
+                            html.Li([html.B("Recovery %: "),
+                                "What share of expenses is covered by EMS billing revenue. "
+                                "Low recovery = heavy reliance on tax levy."],
                                 style={"marginBottom": "8px"}),
-                            html.Li([html.B("300-Call Policy: "), "Mandatory service model review for low-volume depts."]),
                         ], style={"margin": "0", "paddingLeft": "18px", "lineHeight": "1.6",
                                   "fontSize": "0.82rem", "color": C_TEXT, "fontFamily": FONT_STACK}),
                     ], style={"flex": "1.6", "paddingLeft": "20px",
@@ -2490,6 +2904,29 @@ def render_tab(tab):
                        "to units with known model year.",
                     style={"fontSize": "0.8rem", "color": C_MUTED, "margin": "0 0 16px",
                            "lineHeight": "1.55", "fontFamily": FONT_STACK}),
+                _sub_header("Ambulance Utilization Summary"),
+                html.Div([
+                    kpi_card("Total Ambulances",
+                             _get_asset_figs()[8]["total_ambulances"],
+                             f"{_get_asset_figs()[8]['n_depts_with_amb']} departments operate ambulances",
+                             C_PRIMARY),
+                    kpi_card("Avg Calls / Ambulance",
+                             _get_asset_figs()[8]["avg_calls_per_amb"],
+                             "County average — 2024 NFIRS EMS calls",
+                             C_YELLOW),
+                    kpi_card("County Amb / 10K Pop",
+                             _get_asset_figs()[8]["county_amb_per_10k"],
+                             "Jefferson Co. (86,245 residents)",
+                             C_GREEN),
+                ], style={"display": "flex", "gap": "14px", "flexWrap": "wrap", "marginBottom": "20px"}),
+                html.Div([
+                    dcc.Graph(id="asset-calls-per-amb", figure=_get_asset_figs()[6],
+                              config={"displayModeBar": False, "responsive": True},
+                              style={"flex": "1 1 0", "minWidth": 0}),
+                    dcc.Graph(id="asset-amb-per-10k", figure=_get_asset_figs()[7],
+                              config={"displayModeBar": False, "responsive": True},
+                              style={"flex": "1 1 0", "minWidth": 0}),
+                ], style={"display": "flex", "gap": "16px", "marginBottom": "16px"}),
                 html.Div([
                     dcc.Graph(id="asset-ambulance-bar", figure=_get_asset_figs()[0], style={"flex": "1"}),
                     dcc.Graph(id="asset-fleet-stacked", figure=_get_asset_figs()[1], style={"flex": "1"}),
@@ -2515,9 +2952,28 @@ def render_tab(tab):
                          "color": C_MUTED, "fontStyle": "italic"},
                     ],
                 ),
+                _sub_header("Ambulance Replacement Priority — Units Past End-of-Life"),
+                dash_table.DataTable(
+                    id="amb-replace-priority",
+                    columns=[{"name": c, "id": c} for c in _AMBULANCE_REPLACE_PRIORITY.columns],
+                    data=_AMBULANCE_REPLACE_PRIORITY.to_dict("records"),
+                    style_table={"overflowX": "auto", "borderRadius": "8px",
+                                 "overflow": "hidden", "marginBottom": "20px"},
+                    style_header=_DT_STYLE_HEADER,
+                    style_cell={**_DT_STYLE_CELL, "whiteSpace": "normal", "height": "auto"},
+                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE + [
+                        {"if": {"filter_query": '{Risk} eq "CRITICAL"'},
+                         "backgroundColor": "#3A1A1A", "color": "#EF4444"},
+                        {"if": {"filter_query": '{Risk} eq "HIGH"'},
+                         "backgroundColor": "#3A3020", "color": "#F7C143"},
+                        {"if": {"filter_query": '{Risk} eq "MONITOR"'},
+                         "backgroundColor": "#2E2A1E", "color": C_PRIMARY}]),
                 _source_citation(
                     "MABAS_Assets/*.xlsx — 14 MABAS Division 118 FD Resource Lists (apparatus inventories)",
-                    "2024 NFIRS call data (EMS call volumes for cross-reference)",
+                    "2024 NFIRS call data (EMS call volumes for utilization metrics)",
+                    ("Census ACS 2020–2024 — service area populations", "https://data.census.gov"),
+                    ("WI DOA 2025 Municipal Estimates", "https://doa.wi.gov/DIR/Final_Ests_Muni_2025.xlsx"),
+                    "Ambulance end-of-life standard: 15-year / 250,000 mi (ASCO/NHTSA industry guideline)",
                 ),
             ], style=CARD),
         ])
@@ -2925,13 +3381,30 @@ def render_tab(tab):
                     "Wis. Stat. 66.0602(3) + 66.0301 (statutory authority)",
                 ),
             ], style=CARD),
+            html.Div([
+                _section_header("Contract Windows & Rate Escalation"),
+                _sub_header("Contract Expiration Timeline"),
+                dcc.Graph(id="contract-gantt", figure=_get_fig_contract_timeline()[0],
+                    style={"marginBottom": "20px"}),
+                _sub_header("Per-Capita Rate Escalation by Contract"),
+                dcc.Graph(id="contract-escalation", figure=_get_fig_contract_timeline()[1],
+                    style={"marginBottom": "20px"}),
+                _source_citation(
+                    "Jefferson City EMS contract 2024-2027 (Aztalan template)",
+                    "Waterloo fire and EMS contract (Town of Milford)",
+                    "FA Ambulance contract 2023 (Koshkonong & Jefferson Twp)",
+                    "Lake Mills / Ryan Brothers IGAs (Aztalan, Oakland, Lake Mills Town)",
+                ),
+            ], style=CARD),
         ])
 
     elif tab == "tab-recommend":
         return html.Div([
             html.Div([
-                _section_header("Policy Recommendations & Savings Model"),
-                html.P("Analysis for EMS Working Group. Jefferson City figures subject to data audit.",
+                _section_header("Cost Driver Diagnostics & Structural Findings"),
+                html.P("Data-driven analysis of where costs concentrate and why. "
+                    "Estimates quantify the magnitude of identified inefficiencies — "
+                    "not prescriptive targets. Jefferson City figures subject to data audit.",
                     style={"fontSize": "0.8rem", "color": C_TEXT, "lineHeight": "1.6",
                            "background": "#2E1E1E", "border": f"1px solid {C_ORANGE}",
                            "borderLeft": f"4px solid {C_ORANGE}", "borderRadius": "6px",
@@ -2939,7 +3412,7 @@ def render_tab(tab):
                 _sub_header("Cost Per Call vs. Department Volume"),
                 dcc.Graph(id="sec15a-cost-threshold", figure=_get_fig_cost_threshold(),
                     style={"marginBottom": "20px"}),
-                _sub_header("Pathway to 5% Savings ($680K Target)"),
+                _sub_header("Estimated Annual Cost of Identified Inefficiencies"),
                 dcc.Graph(id="sec15b-savings-waterfall", figure=_get_fig_savings(),
                     style={"marginBottom": "20px"}),
                 _sub_header("WI Levy Exception Eligibility"),
@@ -2960,7 +3433,8 @@ def render_tab(tab):
                          "backgroundColor": "#3A3020", "color": "#F7C143"},
                         {"if": {"filter_query": '{Status} contains "Ineligible"'},
                          "backgroundColor": "#3A1A1A", "color": "#EF4444"}]),
-                html.P("Conservative estimate (excl. Jefferson): $1.02M, exceeding $680K target by ~49%.",
+                html.P("Conservative estimate (excl. Jefferson): ~$1.02M in annual costs attributable to "
+                    "identified structural inefficiencies — approximately 7.5% of the county's $13.6M total EMS budget.",
                     style={"fontSize": "0.8rem", "color": C_TEXT, "lineHeight": "1.6",
                            "background": "#2E2A1E", "border": f"1px solid {C_PRIMARY}",
                            "borderLeft": f"4px solid {C_PRIMARY}", "borderRadius": "6px",
@@ -2972,13 +3446,37 @@ def render_tab(tab):
                 ),
             ], style=CARD),
             html.Div([
-                _section_header("Hybrid Transition Roadmap"),
-                html.P("Sequenced 4-phase plan based on contract windows and savings potential.",
+                _section_header("Reference Cost Model: 24/7 ALS Single Unit"),
+                html.P("Chief Bruce Peterson's operating cost projection for a single 24/7 ALS "
+                       "ambulance unit in Jefferson County. Capital costs excluded — assumes "
+                       "existing ambulance(s) and station.",
                     style={"fontSize": "0.8rem", "color": C_TEXT, "lineHeight": "1.6",
                            "background": "#2E2A1E", "border": f"1px solid {C_PRIMARY}",
                            "borderLeft": f"4px solid {C_PRIMARY}", "borderRadius": "6px",
                            "padding": "10px 14px", "marginBottom": "20px", "fontFamily": FONT_STACK}),
-                _sub_header("Phased Transition Timeline (2026–2029)"),
+                html.Div([
+                    kpi_card("Total Operating", "$716,818", "Single 24/7 ALS unit", C_ORANGE),
+                    kpi_card("EMS Revenue",     "$466,200", "700 calls x $666 avg collected", C_GREEN),
+                    kpi_card("Net County Cost",  "$250,618", "Annual tax subsidy needed", C_PRIMARY),
+                    kpi_card("Cost Per Call",    "$1,024",   "$716,818 / 700 calls", C_YELLOW),
+                ], style={"display": "flex", "gap": "12px", "flexWrap": "wrap", "marginBottom": "20px"}),
+                dcc.Graph(id="peterson-waterfall", figure=_get_fig_peterson_waterfall(),
+                    style={"marginBottom": "20px"}),
+                _source_citation(
+                    "25-1210 JC EMS Workgroup Cost Projection.pdf (Chief Bruce Peterson, Fort Atkinson FD)",
+                    "Assumptions: 24/48 schedule, 6 FTEs, 45% benefits load, $666 avg transport fee collected",
+                ),
+            ], style=CARD),
+            html.Div([
+                _section_header("Contract Windows & Structural Transition Opportunities"),
+                html.P("Contract expiration analysis identifying when and where structural changes become "
+                    "feasible based on existing IGA terms. These are data-driven observations about "
+                    "the current contract landscape — not a prescribed implementation plan.",
+                    style={"fontSize": "0.8rem", "color": C_TEXT, "lineHeight": "1.6",
+                           "background": "#2E2A1E", "border": f"1px solid {C_PRIMARY}",
+                           "borderLeft": f"4px solid {C_PRIMARY}", "borderRadius": "6px",
+                           "padding": "10px 14px", "marginBottom": "20px", "fontFamily": FONT_STACK}),
+                _sub_header("Contract Expiration Windows & Feasibility Timeline (2026–2029)"),
                 dash_table.DataTable(
                     id="sec17a-roadmap-table",
                     columns=[{"name": c, "id": c} for c in _df_transition_roadmap.columns],
@@ -2988,16 +3486,14 @@ def render_tab(tab):
                     style_header=_DT_STYLE_HEADER,
                     style_cell={**_DT_STYLE_CELL, "whiteSpace": "normal", "height": "auto"},
                     style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE + [
-                        {"if": {"filter_query": '{Phase} eq "Phase 1"'},
+                        {"if": {"filter_query": '{Window} eq "Near-term"'},
                          "backgroundColor": "#1A3A2A", "color": "#10B981"},
-                        {"if": {"filter_query": '{Phase} eq "Phase 2"'},
+                        {"if": {"filter_query": '{Window} eq "Medium-term"'},
                          "backgroundColor": "#3A2A1A", "color": C_PRIMARY},
-                        {"if": {"filter_query": '{Phase} eq "Phase 3"'},
-                         "backgroundColor": "#3A3020", "color": "#F7C143"},
-                        {"if": {"filter_query": '{Phase} eq "Phase 4"'},
-                         "backgroundColor": "#2E3238", "color": C_TEXT}]),
+                        {"if": {"filter_query": '{Window} eq "Long-term"'},
+                         "backgroundColor": "#3A3020", "color": "#F7C143"}]),
                 _source_citation(
-                    "contract_analysis.md — Section E (transition timeline)",
+                    "contract_analysis.md — Sections B-D (contract structure analysis)",
                     "savings_model.md (implementation phases & contract windows)",
                 ),
             ], style=CARD),
@@ -3011,22 +3507,25 @@ def render_tab(tab):
     Output("map-geojson", "hideout"),
     Output("map-legend", "children"),
     Output("zoom-badge", "children"),
+    Output("map-layer-zcta", "children"),
     Input("map-metric", "value"),
     Input("dept-filter", "value"),
     Input("leaflet-map", "viewport"),
     Input("main-tabs", "value"),
+    Input("map-layers", "value"),
 )
-def update_map(metric, selected_depts, viewport, tab):
+def update_map(metric, selected_depts, viewport, tab, active_layers):
     if tab != "tab-overview":
-        return no_update, no_update, no_update, no_update
+        return no_update, no_update, no_update, no_update, no_update
     zoom = (viewport or {}).get("zoom", 10)
+    active_layers = active_layers or []
 
-    # Select tier based on zoom level
-    if zoom >= 13:
+    # Select tier based on zoom level — lower thresholds for earlier detail
+    if zoom >= 12:
         tier = "zip"
         data_source = ZIP_DATA
         tier_max = _max_zip_calls
-    elif zoom >= 11:
+    elif zoom >= 10.5:
         tier = "city"
         data_source = CITY_DATA
         tier_max = _max_city_calls
@@ -3036,6 +3535,7 @@ def update_map(metric, selected_depts, viewport, tab):
         tier_max = _max_calls
 
     is_rt = "rt" in metric
+    is_asset = metric in ("ambulances", "ems_personnel")
     color_map = _compute_color_map(metric)
     hideout = {"colorMap": color_map}
 
@@ -3054,16 +3554,22 @@ def update_map(metric, selected_depts, viewport, tab):
         return f"rgb({r},{g},{b})"
 
     markers = []
-    min_calls = 10 if tier != "dept" else 0
+    min_calls = 3 if tier != "dept" else 0
 
     for md in sorted(data_source, key=lambda m: m["total_calls"], reverse=True):
         if md["dept"] not in selected_depts:
             continue
         total = md["total_calls"]
-        if total < min_calls:
+        if total < min_calls and not is_asset:
             continue
-        radius = _tier_radius(total)
-        if is_rt:
+        radius = _tier_radius(total) if not is_asset else max(_MIN_MARKER_PX, _tier_radius(total))
+        if is_asset:
+            ast_d = asset_lookup.get(md["dept"], {})
+            asset_val = ast_d.get("Ambulances", 0) if metric == "ambulances" else ast_d.get("EMS_Personnel", 0)
+            asset_val = asset_val or 0
+            asset_max = _max_amb if metric == "ambulances" else _max_pers
+            color = _bubble_color_asset(asset_val, asset_max)
+        elif is_rt:
             if tier == "dept" and metric == "p90_rt":
                 val = md.get("p90", md.get("median_rt", 0))
             else:
@@ -3076,22 +3582,44 @@ def update_map(metric, selected_depts, viewport, tab):
         pct = f"{100*ems_c/total:.0f}%" if total > 0 else "N/A"
 
         if tier == "dept":
-            tooltip_content = html.Div([
-                html.B(md["dept"], style={"fontSize": "13px"}), html.Br(),
-                html.Span("Total calls: "), html.B(f"{total:,}"), html.Br(),
-                html.Span("EMS calls: "), html.B(f"{ems_c:,}"), html.Span(f" ({pct})"), html.Br(),
-                html.Span("Median RT: "), html.B(f"{md.get('median_rt', 'N/A')} min"),
-            ])
+            _tt_items = [html.B(md["dept"], style={"fontSize": "13px"}), html.Br()]
+            if is_asset:
+                _ast_d = asset_lookup.get(md["dept"], {})
+                _svc = ALS_LEVELS.get(md["dept"], {}).get("Level", "N/A")
+                _tt_items += [
+                    html.Span("Service Level: "), html.B(_svc), html.Br(),
+                    html.Span("Ambulances: "), html.B(str(_ast_d.get("Ambulances", 0))), html.Br(),
+                    html.Span("EMS Personnel: "), html.B(str(_ast_d.get("EMS_Personnel", 0))), html.Br(),
+                    html.Span("Paramedics: "), html.B(str(_ast_d.get("Paramedics", 0))),
+                ]
+            else:
+                _tt_items += [
+                    html.Span("Total calls: "), html.B(f"{total:,}"), html.Br(),
+                    html.Span("EMS calls: "), html.B(f"{ems_c:,}"), html.Span(f" ({pct})"), html.Br(),
+                    html.Span("Median RT: "), html.B(f"{md.get('median_rt', 'N/A')} min"),
+                ]
+            tooltip_content = html.Div(_tt_items)
             popup_content = dl.Popup(_build_popup_content(md["dept"]), maxWidth=300)
         elif tier == "city":
             city_name = md.get("city", "")
-            tooltip_content = html.Div([
-                html.B(city_name, style={"fontSize": "13px"}), html.Br(),
-                html.Span("Dept: "), html.B(md["dept"]), html.Br(),
-                html.Span("Total calls: "), html.B(f"{total:,}"), html.Br(),
-                html.Span("EMS calls: "), html.B(f"{ems_c:,}"), html.Span(f" ({pct})"), html.Br(),
-                html.Span("Median RT: "), html.B(f"{md.get('median_rt', 'N/A')} min"),
-            ])
+            if is_asset:
+                _ast_c = asset_lookup.get(md["dept"], {})
+                _svc_c = ALS_LEVELS.get(md["dept"], {}).get("Level", "N/A")
+                tooltip_content = html.Div([
+                    html.B(city_name, style={"fontSize": "13px"}), html.Br(),
+                    html.Span("Dept: "), html.B(md["dept"]), html.Br(),
+                    html.Span("Service Level: "), html.B(_svc_c), html.Br(),
+                    html.Span("Ambulances: "), html.B(str(_ast_c.get("Ambulances", 0))), html.Br(),
+                    html.Span("EMS Personnel: "), html.B(str(_ast_c.get("EMS_Personnel", 0))),
+                ])
+            else:
+                tooltip_content = html.Div([
+                    html.B(city_name, style={"fontSize": "13px"}), html.Br(),
+                    html.Span("Dept: "), html.B(md["dept"]), html.Br(),
+                    html.Span("Total calls: "), html.B(f"{total:,}"), html.Br(),
+                    html.Span("EMS calls: "), html.B(f"{ems_c:,}"), html.Span(f" ({pct})"), html.Br(),
+                    html.Span("Median RT: "), html.B(f"{md.get('median_rt', 'N/A')} min"),
+                ])
             popup_content = dl.Popup(html.Div([
                 html.H4(city_name, style={"margin": "0 0 6px 0", "fontSize": "14px"}),
                 html.P(f"Department: {md['dept']}", style={"margin": "2px 0"}),
@@ -3101,12 +3629,23 @@ def update_map(metric, selected_depts, viewport, tab):
             ], style={"fontFamily": FONT_STACK, "fontSize": "12px"}), maxWidth=260)
         else:
             zip_code = md.get("zip", "")
-            tooltip_content = html.Div([
-                html.B(f"ZIP {zip_code}", style={"fontSize": "13px"}), html.Br(),
-                html.Span("Dept: "), html.B(md["dept"]), html.Br(),
-                html.Span("Total calls: "), html.B(f"{total:,}"), html.Br(),
-                html.Span("Median RT: "), html.B(f"{md.get('median_rt', 'N/A')} min"),
-            ])
+            if is_asset:
+                _ast_z = asset_lookup.get(md["dept"], {})
+                _svc_z = ALS_LEVELS.get(md["dept"], {}).get("Level", "N/A")
+                tooltip_content = html.Div([
+                    html.B(f"ZIP {zip_code}", style={"fontSize": "13px"}), html.Br(),
+                    html.Span("Dept: "), html.B(md["dept"]), html.Br(),
+                    html.Span("Service Level: "), html.B(_svc_z), html.Br(),
+                    html.Span("Ambulances: "), html.B(str(_ast_z.get("Ambulances", 0))), html.Br(),
+                    html.Span("EMS Personnel: "), html.B(str(_ast_z.get("EMS_Personnel", 0))),
+                ])
+            else:
+                tooltip_content = html.Div([
+                    html.B(f"ZIP {zip_code}", style={"fontSize": "13px"}), html.Br(),
+                    html.Span("Dept: "), html.B(md["dept"]), html.Br(),
+                    html.Span("Total calls: "), html.B(f"{total:,}"), html.Br(),
+                    html.Span("Median RT: "), html.B(f"{md.get('median_rt', 'N/A')} min"),
+                ])
             popup_content = dl.Popup(html.Div([
                 html.H4(f"ZIP {zip_code}", style={"margin": "0 0 6px 0", "fontSize": "14px"}),
                 html.P(f"Department: {md['dept']}", style={"margin": "2px 0"}),
@@ -3127,9 +3666,44 @@ def update_map(metric, selected_depts, viewport, tab):
             )
         )
 
-    if is_rt:
+    # ── Dynamic ZIP boundary layer ──
+    # Auto-show when zoomed to city/zip tier, or when user checks the toggle.
+    # Always uses the dynamic colored choropleth with data tooltips.
+    show_zcta = tier in ("city", "zip") or "zcta" in active_layers
+    zcta_children = []
+    if show_zcta:
+        zip_color_map = _compute_zip_color_map(metric, ZIP_DATA, selected_depts)
+        enriched_zcta = _build_zcta_data_geojson(ZIP_DATA, selected_depts)
+        zcta_children = [
+            dl.GeoJSON(
+                data=enriched_zcta,
+                options=dict(style=_zcta_style_dynamic, onEachFeature=_zcta_label_dynamic),
+                hideout={"zipColorMap": zip_color_map},
+                hoverStyle={"weight": 2, "fillOpacity": 0.45},
+            ),
+        ]
+
+    if is_asset:
+        legend_label = "Ambulances" if metric == "ambulances" else "EMS Personnel"
         legend = [
-            html.B("Response Time", style={"fontSize": "12px"}), html.Br(),
+            html.B(legend_label, style={"fontSize": "12px"}), html.Br(),
+            html.Div([
+                html.Span(style={"background": "rgb(209,196,233)", "display": "inline-block",
+                                 "width": "12px", "height": "12px", "borderRadius": "50%",
+                                 "border": "1px solid #888", "marginRight": "5px"}),
+                html.Span("None / Low"),
+            ], style={"marginTop": "5px"}),
+            html.Div([
+                html.Span(style={"background": "rgb(88,28,135)", "display": "inline-block",
+                                 "width": "12px", "height": "12px", "borderRadius": "50%", "marginRight": "5px"}),
+                html.Span("High"),
+            ], style={"marginTop": "3px"}),
+            html.Div("Fill = dept asset count", style={"marginTop": "5px", "color": C_MUTED}),
+        ]
+    elif is_rt:
+        legend_type = "Response Time"
+        legend = [
+            html.B(legend_type, style={"fontSize": "12px"}), html.Br(),
             html.Div([
                 html.Span(style={"background": "rgb(33,153,33)", "display": "inline-block",
                                  "width": "12px", "height": "12px", "borderRadius": "50%", "marginRight": "5px"}),
@@ -3158,14 +3732,28 @@ def update_map(metric, selected_depts, viewport, tab):
             ], style={"marginTop": "3px"}),
             html.Div("Marker size & fill = call volume", style={"marginTop": "5px", "color": C_MUTED}),
         ]
+    # Add ZIP choropleth note to legend when showing dynamic boundaries
+    if show_zcta:
+        legend.append(html.Div(style={"borderTop": "1px solid rgba(255,255,255,0.15)",
+                                       "margin": "6px 0 4px"}))
+        legend.append(html.Div("ZIP fill = same metric", style={"color": C_MUTED, "fontSize": "10px"}))
 
     tier_labels = {"dept": "Department View", "city": "City/Town View", "zip": "ZIP Code View"}
-    badge = tier_labels[tier]
+    tier_hints = {
+        "dept": "Zoom in or click a district for city-level detail",
+        "city": "Zoom in for ZIP-code detail",
+        "zip":  "Zoom out for broader view",
+    }
+    badge = html.Span([
+        html.Span(tier_labels[tier], style={"fontWeight": "700"}),
+        html.Span(f"  \u00b7  {tier_hints[tier]}",
+                  style={"fontWeight": "400", "color": "rgba(255,255,255,0.5)", "fontSize": "10px"}),
+    ])
 
-    return markers, hideout, legend, badge
+    return markers, hideout, legend, badge, zcta_children
 
 
-# ── Map overlay layers callback ──────────────────────────────────────────────
+# ── Map overlay layers callback (ZCTA now handled by update_map) ─────────────
 @app.callback(
     Output("map-layer-ems", "children"),
     Output("map-layer-fire", "children"),
@@ -3226,6 +3814,39 @@ def toggle_map_layers(active_layers, tab):
         ]
 
     return ems_children, fire_children, station_children, helen_children
+
+
+# ── Zoom-to-fit: auto-adjust map bounds when department filter changes ────────
+@app.callback(
+    Output("leaflet-map", "bounds"),
+    Input("dept-filter", "value"),
+    Input("main-tabs", "value"),
+    prevent_initial_call=True,
+)
+def zoom_to_fit_depts(selected_depts, tab):
+    if tab != "tab-overview" or not selected_depts:
+        return no_update
+    # If all depts selected, use full county bounds
+    if len(selected_depts) >= len(ALL_DEPTS):
+        return COUNTY_BOUNDS
+    # Compute combined bounding box for selected departments
+    sw_lat, sw_lon = 90.0, 180.0
+    ne_lat, ne_lon = -90.0, -180.0
+    found = False
+    for d in selected_depts:
+        if d in DEPT_BOUNDS:
+            b = DEPT_BOUNDS[d]
+            sw_lat = min(sw_lat, b[0][0])
+            sw_lon = min(sw_lon, b[0][1])
+            ne_lat = max(ne_lat, b[1][0])
+            ne_lon = max(ne_lon, b[1][1])
+            found = True
+    if not found:
+        return no_update
+    # Add slight padding
+    pad_lat = (ne_lat - sw_lat) * 0.08
+    pad_lon = (ne_lon - sw_lon) * 0.08
+    return [[sw_lat - pad_lat, sw_lon - pad_lon], [ne_lat + pad_lat, ne_lon + pad_lon]]
 
 
 # FIX 1: Dynamic KPI header row callback
@@ -4138,81 +4759,382 @@ def _get_budget_figs():
     b_plot["EMS_Revenue"] = b_plot["EMS_Revenue"].fillna(0)
     b_plot["Net_Tax"]     = b_plot["Net_Tax"].fillna(0)
 
-    fig_b = go.Figure([
-        go.Bar(x=b_plot["Municipality"], y=b_plot["Total_Expense"], name="Total Expense",
-               marker_color=C_PRIMARY,
-               hovertemplate="<b>%{x}</b><br>Total Expense: $%{y:,.0f}<extra></extra>"),
-        go.Bar(x=b_plot["Municipality"], y=b_plot["EMS_Revenue"],   name="EMS Revenue",
-               marker_color=C_GREEN,
-               hovertemplate="<b>%{x}</b><br>EMS Revenue: $%{y:,.0f}<extra></extra>"),
-        go.Bar(x=b_plot["Municipality"], y=b_plot["Net_Tax"],        name="Net Tax Supported",
-               marker_color=C_ORANGE,
-               hovertemplate="<b>%{x}</b><br>Net Tax: $%{y:,.0f}<extra></extra>"),
-    ])
+    # -- Sankey diagram: funding sources → each municipality's total expense --
+    # Left side  = 3 funding source categories
+    # Right side = each municipality (sized by total expense)
+    # Flow width = dollar amount from that source into that department.
+    b_plot["Other_Revenue"] = (
+        b_plot["Total_Expense"] - b_plot["EMS_Revenue"] - b_plot["Net_Tax"]
+    ).clip(lower=0)
+
+    # ── 3-column Sankey: Known Funding → Municipalities → Total Expenses ────
+    # IMPORTANT: We only show the two *confirmed* revenue streams — EMS billing
+    # and tax levy. The gap between (Revenue + Tax) and Total Expense is real:
+    # it's an unfunded shortfall covered by fund balance drawdowns, grants,
+    # or other sources we can't confirm. By NOT plugging it with a fake "Other"
+    # category, departments with deficits are visually obvious — the expense
+    # node on the right will be fatter than the funding flowing in from the left.
+    b_plot = b_plot.sort_values("Total_Expense", ascending=False).reset_index(drop=True)
+    munis = b_plot["Municipality"].tolist()
+    n_munis = len(munis)
+
+    def _sk_fmt(v):
+        if abs(v) >= 1_000_000:
+            return f"${v / 1_000_000:.1f}M"
+        if abs(v) >= 1_000:
+            return f"${v / 1_000:.0f}K"
+        return f"${v:,.0f}"
+
+    # Compute known funding vs expense gap per municipality
+    b_plot["Known_Funding"] = b_plot["EMS_Revenue"] + b_plot["Net_Tax"]
+    b_plot["Funding_Gap"] = b_plot["Total_Expense"] - b_plot["Known_Funding"]
+
+    # ── Node indices ──
+    # 0 = EMS Revenue, 1 = Tax Levy
+    # 2..2+n-1 = municipalities (middle column)
+    # 2+n..2+2n-1 = expense nodes (right column)
+    SRC_REV, SRC_TAX = 0, 1
+    MUNI_START = 2
+    EXP_START = 2 + n_munis
+
+    muni_idx = {m: MUNI_START + i for i, m in enumerate(munis)}
+    exp_idx  = {m: EXP_START + i for i, m in enumerate(munis)}
+
+    tot_rev = b_plot["EMS_Revenue"].sum()
+    tot_tax = b_plot["Net_Tax"].sum()
+    tot_exp = b_plot["Total_Expense"].sum()
+    tot_gap = b_plot["Funding_Gap"].clip(lower=0).sum()
+
+    # -- Node labels --
+    src_labels = [
+        f"EMS Revenue  {_sk_fmt(tot_rev)}",
+        f"Property Tax Levy  {_sk_fmt(tot_tax)}",
+    ]
+    muni_labels = list(munis)
+    exp_labels = []
+    for _, row in b_plot.iterrows():
+        gap = row["Funding_Gap"]
+        if gap > 100:
+            tag = f"Gap: {_sk_fmt(gap)}"
+        elif gap < -100:
+            tag = f"Surplus: +{_sk_fmt(abs(gap))}"
+        else:
+            tag = "Fully Funded"
+        exp_labels.append(f"Expenses {_sk_fmt(row['Total_Expense'])}  ({tag})")
+
+    node_labels = src_labels + muni_labels + exp_labels
+
+    # -- Node colors --
+    src_colors = [
+        "rgba(16,185,129,0.95)",   # green — EMS Revenue
+        "rgba(96,165,250,0.95)",   # blue  — Tax Levy (neutral gov't funding, not "expense" red)
+    ]
+    muni_colors = ["rgba(140,150,165,0.80)"] * n_munis
+    exp_colors = []
+    for _, row in b_plot.iterrows():
+        gap = row["Funding_Gap"]
+        if gap > 100:
+            exp_colors.append("rgba(217,65,51,0.75)")    # red — underfunded
+        else:
+            exp_colors.append("rgba(16,185,129,0.75)")   # green — fully covered
+    node_colors = src_colors + muni_colors + exp_colors
+
+    # -- Node positions --
+    n_total = len(node_labels)
+    node_x = [0.0] * n_total
+    node_y = [0.0] * n_total
+    # Left column: 2 source nodes
+    node_x[SRC_REV] = 0.001; node_y[SRC_REV] = 0.15
+    node_x[SRC_TAX] = 0.001; node_y[SRC_TAX] = 0.70
+    # Middle + Right columns: spread municipalities evenly
+    for i, m in enumerate(munis):
+        y_pos = 0.01 + (i / max(n_munis - 1, 1)) * 0.98
+        node_x[muni_idx[m]] = 0.42
+        node_y[muni_idx[m]] = y_pos
+        node_x[exp_idx[m]] = 0.999
+        node_y[exp_idx[m]] = y_pos
+
+    # -- Links --
+    sources, targets, values, link_colors = [], [], [], []
+
+    # Left → Middle: known funding into each municipality
+    for _, row in b_plot.iterrows():
+        m = row["Municipality"]
+        if row["EMS_Revenue"] > 0:
+            sources.append(SRC_REV)
+            targets.append(muni_idx[m])
+            values.append(row["EMS_Revenue"])
+            link_colors.append("rgba(16,185,129,0.22)")
+        if row["Net_Tax"] > 0:
+            sources.append(SRC_TAX)
+            targets.append(muni_idx[m])
+            values.append(row["Net_Tax"])
+            link_colors.append("rgba(96,165,250,0.22)")
+
+    # Middle → Right: municipality → its expense node (full expense amount)
+    # Sankey requires: flow out of muni = flow into muni. Since we're only
+    # sending known funding in, we link min(known_funding, total_expense) as
+    # the "funded" flow, then the expense node's size shows the full cost.
+    # To make the expense node correctly sized, we send Total_Expense as the
+    # link value — Plotly will size the muni node to the MAX of in/out.
+    for _, row in b_plot.iterrows():
+        m = row["Municipality"]
+        sources.append(muni_idx[m])
+        targets.append(exp_idx[m])
+        # Use Total_Expense so the right node shows true cost
+        values.append(row["Total_Expense"])
+        gap = row["Funding_Gap"]
+        if gap > 100:
+            link_colors.append("rgba(217,65,51,0.15)")   # reddish — deficit flow
+        else:
+            link_colors.append("rgba(16,185,129,0.15)")  # greenish — funded flow
+
+    fig_b = go.Figure(go.Sankey(
+        arrangement="snap",
+        node=dict(
+            pad=12,
+            thickness=20,
+            line=dict(color=C_BORDER, width=0.5),
+            label=node_labels,
+            color=node_colors,
+            x=node_x,
+            y=node_y,
+            hovertemplate="<b>%{label}</b><extra></extra>",
+        ),
+        link=dict(
+            source=sources,
+            target=targets,
+            value=values,
+            color=link_colors,
+            hovertemplate=(
+                "%{source.label} → %{target.label}<br>"
+                "<b>$%{value:,.0f}</b><extra></extra>"
+            ),
+        ),
+    ))
     fig_b.update_layout(
-        barmode="group",
-        title="Budget: Expense vs Revenue — All 11 Municipalities (FY2025 Budget)",
-        yaxis_title="$",
+        title="EMS Funding Flow: Revenue → Departments → Expenses (FY2025)<br>"
+              "<sup>Green = EMS billing revenue · Blue = property tax levy · "
+              "Right: green = fully funded, red = funding gap · "
+              "Edgerton revenue/tax N/A</sup>",
     )
-    _apply_chart_style(fig_b, height=520, legend_below=False)
-    fig_b.update_layout(
-        margin=dict(l=60, r=40, t=60, b=130),
-        xaxis=dict(tickangle=-40, automargin=True, tickfont=dict(size=12, color=C_TEXT)),
-        yaxis=dict(tickprefix="$", tickformat=",.0f"),
-    )
-    # Annotate Edgerton where revenue/tax data is not yet available
-    if "Edgerton" in b_plot["Municipality"].values:
-        fig_b.add_annotation(
-            x="Edgerton", y=0,
-            text="Revenue/Tax<br>N/A (multi-county)",
-            showarrow=False,
-            yshift=-28,
-            font=dict(size=9, color=C_MUTED),
-            xanchor="center",
-        )
-    # Annotate Ixonia — only department on FY2024 budget (all others are FY2025)
-    if "Ixonia" in b_plot["Municipality"].values:
-        fig_b.add_annotation(
-            x="Ixonia", y=0,
-            text="FY2024",
-            showarrow=False,
-            yshift=-28,
-            font=dict(size=9, color=C_MUTED),
-            xanchor="center",
+    _apply_chart_style(fig_b, height=700, legend_below=False, title_has_subtitle=True)
+    fig_b.update_layout(margin=dict(l=5, r=5, t=88, b=20))
+
+    # ── Billing rates chart: Jefferson Co. confirmed (solid) + WI peer benchmarks (faded) ────────
+    # Design decisions:
+    #   - No blank-string spacer x-tick; instead, two separate x-category arrays + add_shape band
+    #     render a clean visual separator without an empty tick mark.
+    #   - None/NaN rates (e.g. Madison ALS2, Brookfield ALS1) are plotted as y=0 with invisible
+    #     marker so the bar slot exists, then a scatter "N/A" text trace marks each absent rate.
+    #   - Text labels: "$1,500" for real values, blank for None (suppressed via conditional list).
+    #     A second pass of scatter text draws "N/A" above the zero-height bars.
+    #   - Hover templates include Source + Note from wi_billing_benchmarks for WI peer bars.
+
+    _jeff_munis   = list(billing["Municipality"])
+    _bench_munis  = list(wi_billing_benchmarks["Municipality"])
+    # No spacer in x-list; separation is achieved via shading + annotation below.
+    _all_munis = _jeff_munis + _bench_munis
+
+    nj = len(_jeff_munis)   # number of Jefferson Co. entries
+    nb = len(_bench_munis)  # number of benchmark entries
+    n  = nj + nb
+
+    # ── Raw value arrays (None where rate doesn't exist) ──────────────────────────────────────────
+    def _safe(series):
+        return [v if pd.notna(v) else None for v in series]
+
+    _bls_vals_j  = list(billing["BLS"])
+    _als1_vals_j = list(billing["ALS1"])
+    _als2_vals_j = list(billing["ALS2"])
+
+    _bls_vals_b  = _safe(wi_billing_benchmarks["BLS"])
+    _als1_vals_b = _safe(wi_billing_benchmarks["ALS1"])
+    _als2_vals_b = _safe(wi_billing_benchmarks["ALS2"])
+
+    _bls_vals  = _bls_vals_j  + _bls_vals_b
+    _als1_vals = _als1_vals_j + _als1_vals_b
+    _als2_vals = _als2_vals_j + _als2_vals_b
+
+    # ── y-arrays for plotting: replace None with 0 so bar slot renders (invisible color) ─────────
+    def _plot_y(vals):
+        return [v if v is not None else 0 for v in vals]
+
+    # ── Text label arrays: "$1,500" for real values, "" for None (label suppressed) ─────────────
+    def _bar_text(vals):
+        # Cast floats (e.g. 2200.0 from pandas float64 column) to int before formatting
+        # so labels render as "$2,200" not "$2,200.0".
+        return [f"${int(v):,}" if v is not None else "" for v in vals]
+
+    # ── Bar color arrays: solid for Jefferson Co., faded for benchmarks, transparent for None ────
+    # Jefferson Co. always has real values (all 3 rate levels confirmed), so no transparency needed.
+    # For benchmark bars: faded if rate exists, fully transparent if None (invisible zero bar).
+    _bls_colors_b  = ["rgba(139,111,71,0.45)" if v is not None else "rgba(0,0,0,0)" for v in _bls_vals_b]
+    _als1_colors_b = ["rgba(37,99,235,0.35)"  if v is not None else "rgba(0,0,0,0)" for v in _als1_vals_b]
+    _als2_colors_b = ["rgba(247,193,67,0.45)" if v is not None else "rgba(0,0,0,0)" for v in _als2_vals_b]
+
+    _bls_colors  = ["#8B6F47"]  * nj + _bls_colors_b
+    _als1_colors = [C_PRIMARY]  * nj + _als1_colors_b
+    _als2_colors = [C_YELLOW]   * nj + _als2_colors_b
+
+    # ── Hover text arrays ─────────────────────────────────────────────────────────────────────────
+    # Jefferson Co.: simple rate display.
+    # WI peers: include Source and Note from wi_billing_benchmarks.
+    _bench_src   = list(wi_billing_benchmarks["Source"])
+    _bench_note  = list(wi_billing_benchmarks["Note"])
+
+    def _hover_jeff(level, vals):
+        return [f"<b>{m}</b> (Jefferson Co.)<br>{level}: ${int(v):,}<br>"
+                f"<i>Confirmed from 2025 fee schedule PDF</i><extra></extra>"
+                for m, v in zip(_jeff_munis, vals)]
+
+    def _hover_bench(level, vals):
+        rows = []
+        for m, v, src, note in zip(_bench_munis, vals, _bench_src, _bench_note):
+            if v is not None:
+                rows.append(f"<b>{m}</b> (WI Peer)<br>{level}: ${int(v):,}<br>"
+                            f"Source: {src}<br>Note: {note}<extra></extra>")
+            else:
+                rows.append(f"<b>{m}</b> (WI Peer)<br>{level}: N/A"
+                            f" — not offered or flat-rate structure<br>"
+                            f"Source: {src}<br>Note: {note}<extra></extra>")
+        return rows
+
+    _bls_hover  = _hover_jeff("BLS",  _bls_vals_j)  + _hover_bench("BLS",  _bls_vals_b)
+    _als1_hover = _hover_jeff("ALS1", _als1_vals_j) + _hover_bench("ALS1", _als1_vals_b)
+    _als2_hover = _hover_jeff("ALS2", _als2_vals_j) + _hover_bench("ALS2", _als2_vals_b)
+
+    # ── N/A scatter traces: text="N/A" above zero bars for missing benchmark rates ───────────────
+    # y-axis max is ~$2,400 (Waukesha ALS2). Place "N/A" at $160 (~6.5% of range) so the label
+    # sits clearly in the chart area just above the baseline, identifiable without obscuring data.
+    _NA_Y = 160
+
+    def _na_scatter(level, vals, color, offset_sign=1):
+        """Return a go.Scatter trace drawing 'N/A' above bars where vals[i] is None.
+        Only applies to benchmark positions (indices nj .. nj+nb-1) since Jefferson always has data."""
+        na_x, na_y = [], []
+        for i, (m, v) in enumerate(zip(_bench_munis, vals)):
+            if v is None:
+                na_x.append(m)
+                na_y.append(_NA_Y)
+        if not na_x:
+            return None
+        return go.Scatter(
+            x=na_x, y=na_y,
+            mode="text",
+            text=["N/A"] * len(na_x),
+            textfont=dict(size=10, color=color),
+            textposition="middle center",
+            showlegend=False,
+            hoverinfo="skip",
+            name=f"_na_{level}",
         )
 
+    _na_bls  = _na_scatter("BLS",  _bls_vals_b,  "#8B6F47")
+    _na_als1 = _na_scatter("ALS1", _als1_vals_b, C_PRIMARY)
+    _na_als2 = _na_scatter("ALS2", _als2_vals_b, C_YELLOW)
+
+    # ── Build figure ─────────────────────────────────────────────────────────────────────────────
     fig_bill = go.Figure([
-        go.Bar(x=billing["Municipality"], y=billing["BLS"],  name="BLS",
-               marker_color="#8B6F47",
-               text=billing["BLS"], texttemplate="$%{text:,}", textposition="outside",
-               hovertemplate="<b>%{x}</b><br>BLS: $%{y:,}<extra></extra>"),
-        go.Bar(x=billing["Municipality"], y=billing["ALS1"], name="ALS1",
-               marker_color=C_PRIMARY,
-               text=billing["ALS1"], texttemplate="$%{text:,}", textposition="outside",
-               hovertemplate="<b>%{x}</b><br>ALS1: $%{y:,}<extra></extra>"),
-        go.Bar(x=billing["Municipality"], y=billing["ALS2"], name="ALS2",
-               marker_color=C_YELLOW,
-               text=billing["ALS2"], texttemplate="$%{text:,}", textposition="outside",
-               hovertemplate="<b>%{x}</b><br>ALS2: $%{y:,}<extra></extra>"),
+        go.Bar(
+            x=_all_munis, y=_plot_y(_bls_vals),
+            name="BLS",
+            marker_color=_bls_colors,
+            text=_bar_text(_bls_vals),
+            texttemplate="%{text}",
+            textposition="outside",
+            textfont=dict(size=10),
+            customdata=list(range(n)),
+            hovertemplate=[h.replace("<extra></extra>", "") + "<extra></extra>" for h in _bls_hover],
+        ),
+        go.Bar(
+            x=_all_munis, y=_plot_y(_als1_vals),
+            name="ALS1",
+            marker_color=_als1_colors,
+            text=_bar_text(_als1_vals),
+            texttemplate="%{text}",
+            textposition="outside",
+            textfont=dict(size=10),
+            hovertemplate=[h.replace("<extra></extra>", "") + "<extra></extra>" for h in _als1_hover],
+        ),
+        go.Bar(
+            x=_all_munis, y=_plot_y(_als2_vals),
+            name="ALS2",
+            marker_color=_als2_colors,
+            text=_bar_text(_als2_vals),
+            texttemplate="%{text}",
+            textposition="outside",
+            textfont=dict(size=10),
+            hovertemplate=[h.replace("<extra></extra>", "") + "<extra></extra>" for h in _als2_hover],
+        ),
     ])
+    # Append N/A scatter traces (only if there are any missing rates)
+    for _na_tr in [_na_bls, _na_als1, _na_als2]:
+        if _na_tr is not None:
+            fig_bill.add_trace(_na_tr)
+
     fig_bill.update_layout(
         barmode="group",
-        title="2025 EMS Billing Rates — Resident, per Transport<br>"
-              "<sup>Only 3 of 14 departments have publicly posted fee schedules</sup>",
+        title="2025 EMS Billing Rates — Jefferson Co. vs. WI Peers<br>"
+              "<sup>Jefferson Co.: 3 of 14 depts confirmed (solid) · WI peers for context (faded) · "
+              "N/A = rate level not offered or flat-rate structure · 11 Jefferson Co. depts unpublished</sup>",
         yaxis_title="$ per transport",
     )
-    _apply_chart_style(fig_bill, height=380, legend_below=False, title_has_subtitle=True)
-    fig_bill.update_layout(
-        margin=dict(l=60, r=40, t=80, b=80),
-        xaxis=dict(tickfont=dict(size=13, color=C_TEXT)),
-        yaxis=dict(tickprefix="$", tickformat=",.0f"),
+
+    # ── Visual separator: shaded band between Jefferson Co. and WI peers ─────────────────────────
+    # x-axis is categorical; integer positions 0..nj-1 = Jefferson, nj..nj+nb-1 = WI peers.
+    # The band x0=nj-0.5 / x1=nj+0.5 fills the half-bar gap on either side of the boundary.
+    fig_bill.add_shape(
+        type="rect",
+        xref="x", yref="paper",
+        x0=nj - 0.5, x1=nj + 0.5,
+        y0=0, y1=1,
+        fillcolor=C_BORDER,
+        opacity=0.25,
+        layer="below",
+        line_width=0,
     )
-    # Note: billed rates are list-price; actual collected rates are substantially lower.
-    # Fort Atkinson confirmed avg collected = $666 vs $1,500 billed (Peterson projection, 2025).
+    # Left group label above shaded band separator
     fig_bill.add_annotation(
-        x=0.5, y=-0.22, xref="paper", yref="paper",
-        text="Billed rates shown. Actual collected rates are significantly lower — "
-             "e.g. Fort Atkinson avg collected = $666 vs $1,500 billed (Peterson 2025 projection).",
+        x=(nj - 1) / 2 / (n - 1), y=1.045,
+        xref="paper", yref="paper",
+        text="<b>Jefferson County</b> <i>(confirmed)</i>",
+        showarrow=False,
+        font=dict(size=10, color=C_PRIMARY),
+        xanchor="center", yanchor="bottom",
+    )
+    # Right group label — center over positions nj .. nj+nb-1
+    fig_bill.add_annotation(
+        x=(nj + (nb - 1) / 2) / (n - 1), y=1.045,
+        xref="paper", yref="paper",
+        text="<b>WI Peer Benchmarks</b> <i>(context only)</i>",
+        showarrow=False,
+        font=dict(size=10, color=C_MUTED),
+        xanchor="center", yanchor="bottom",
+    )
+
+    _apply_chart_style(fig_bill, height=560, legend_below=True, title_has_subtitle=True)
+    fig_bill.update_layout(
+        margin=dict(l=70, r=40, t=100, b=190),
+        xaxis=dict(tickfont=dict(size=11, color=C_TEXT), tickangle=-30),
+        yaxis=dict(tickprefix="$", tickformat=",.0f"),
+        legend=dict(
+            orientation="h",
+            yanchor="top", y=-0.32,
+            xanchor="left", x=0,
+            font=dict(size=11),
+            bgcolor="rgba(0,0,0,0)", bordercolor="rgba(0,0,0,0)",
+        ),
+    )
+    # Footnote annotation
+    fig_bill.add_annotation(
+        x=0.5, y=-0.52, xref="paper", yref="paper",
+        text="Billed (list price) rates shown. Actual collected rates are significantly lower — "
+             "e.g. Fort Atkinson avg collected = $666 vs $1,500 billed.<br>"
+             "Hover each bar for source citation and notes. "
+             "WI peers: Waukesha (soft billing — residents not billed after insurance), "
+             "Fitch-Rona (combined BLS/ALS flat rate), Madison (flat rate, no BLS/ALS distinction), "
+             "Richfield (volunteer dept), Brookfield (suburban benchmark). Sources: municipal websites, Mar 2026.",
         showarrow=False,
         font=dict(size=9, color=C_MUTED),
         xanchor="center", yanchor="top",
@@ -4249,11 +5171,26 @@ def _get_budget_figs():
         texttemplate="$%{text:,.0f}", textposition="outside",
         hovertemplate="<b>%{x}</b><br>Cost/Call: $%{y:,.0f}<br>Model: %{fullData.name}<extra></extra>",
     )
-    _apply_chart_style(fig_cpc, height=540, legend_below=False, title_has_subtitle=True)
+    # legend_below=True: 5 model-color entries go below the plot.
+    # height=540 matches fig_epc in the same flex row.
+    # b=190: accommodates 2 possible legend rows (5 items may wrap) + rotated x-axis labels
+    # + yshift=-30 below-axis annotations for Edgerton and Cambridge.
+    # t=88: enough room for the 2-line title (main + <sup> subtitle) without crowding.
+    # r=60: extra right margin for "outside" text labels on the tallest bars (Jefferson).
+    # legend y=-0.30 with tracegroupgap=0: compact, non-wrapping layout preferred.
+    _apply_chart_style(fig_cpc, height=540, legend_below=True, title_has_subtitle=True)
     fig_cpc.update_layout(
-        margin=dict(l=60, r=40, t=80, b=130),
+        margin=dict(l=70, r=60, t=88, b=190),
         xaxis=dict(tickangle=-40, automargin=True, tickfont=dict(size=12, color=C_TEXT)),
         yaxis=dict(tickprefix="$", tickformat=",.0f"),
+        legend=dict(
+            orientation="h",
+            yanchor="top", y=-0.28,
+            xanchor="left", x=0,
+            font=dict(size=11),
+            bgcolor="rgba(0,0,0,0)", bordercolor="rgba(0,0,0,0)",
+            tracegroupgap=0,
+        ),
     )
     # Annotate Edgerton — partial budget (west division only); true cost/call is higher
     if "Edgerton" in budget_kpi_valid["Municipality"].values:
@@ -4306,9 +5243,16 @@ def _get_budget_figs():
               "· WI avg EMS user fee = $36/capita shown for reference</sup>",
         yaxis_title="$ per capita",
     )
+    # No named legend traces (colors are a list, not individual named traces), so
+    # the legend widget is invisible.  legend_below=False keeps it above (harmless).
+    # height=540 matches fig_cpc in the same flex row.
+    # t=88: room for 2-line title + subtitle without crowding the topmost bar label.
+    # r=180: critical — both hline annotations use annotation_position="top right" /
+    #        "bottom right" and need space so their text isn't cut off at the right edge.
+    # b=160: accommodates rotated x-axis tick labels + yshift=-30 below-axis annotations.
     _apply_chart_style(fig_epc, height=540, legend_below=False, title_has_subtitle=True)
     fig_epc.update_layout(
-        margin=dict(l=60, r=40, t=85, b=130),
+        margin=dict(l=70, r=180, t=88, b=160),
         xaxis=dict(tickangle=-40, automargin=True, tickfont=dict(size=12, color=C_TEXT)),
         yaxis=dict(tickprefix="$", tickformat=",.0f"),
     )
@@ -4349,7 +5293,65 @@ def _get_budget_figs():
             xanchor="center",
         )
 
-    return fig_b, fig_bill, fig_cpc, fig_epc
+    # ── Funding Gap Breakdown — explains how each dept covers the shortfall ──
+    GAP_EXPLANATIONS = {
+        "Ixonia":        "Town contracts ($180K from surrounding towns), state EMS dues, fund balance drawdown",
+        "Jefferson":     "Referendum Fund 31 ($624K) — voters approved dedicated EMS tax in 2023",
+        "Watertown":     "Small gap (~$69K) — likely state aid or miscellaneous revenue",
+        "Fort Atkinson": "Minor gap (~$47K) — likely grants or fund balance; EMS fund nearly self-sustaining",
+        "Whitewater":    "State shared revenue, grants, inter-fund transfers within Fund 249",
+        "Cambridge":     "No gap — fully funded by tax levy",
+        "Lake Mills":    "No gap — tax levy covers full contract payment to LMFD",
+        "Waterloo":      "Contract payments from surrounding towns (City + Towns cost-sharing formula)",
+        "Johnson Creek": "Township contract contributions, prior-year billing collections",
+        "Palmyra":       "Town of Palmyra contribution ($250K) partially in levy; remainder is misc revenue",
+        "Edgerton":      "Unknown — multi-county district (Rock/Dane/Jefferson), full budget not public",
+    }
+    gap_df = b_plot.copy()
+    gap_df["Funding_Gap"] = (gap_df["Total_Expense"] - gap_df["EMS_Revenue"] - gap_df["Net_Tax"]).clip(lower=0)
+    gap_df = gap_df[gap_df["Funding_Gap"] > 100].sort_values("Funding_Gap", ascending=True)
+    gap_df["Explanation"] = gap_df["Municipality"].map(GAP_EXPLANATIONS).fillna("Not yet documented")
+
+    fig_gap = go.Figure()
+    fig_gap.add_trace(go.Bar(
+        y=gap_df["Municipality"],
+        x=gap_df["Funding_Gap"],
+        orientation="h",
+        marker_color=C_YELLOW,
+        text=gap_df["Funding_Gap"].apply(lambda v: f"${v:,.0f}"),
+        textposition="outside",
+        customdata=gap_df["Explanation"].values,
+        hovertemplate=(
+            "<b>%{y}</b><br>"
+            "Funding Gap: <b>$%{x:,.0f}</b><br>"
+            "%{customdata}<extra></extra>"
+        ),
+    ))
+    # Explanation text moved to a companion table below the chart for readability
+
+    fig_gap.update_layout(
+        title="How Departments Fill the Funding Gap<br>"
+              "<sup>Difference between (EMS Revenue + Tax Levy) and Total Expense — "
+              "hover for details</sup>",
+        xaxis_title="Unfunded Amount ($)",
+    )
+    _apply_chart_style(fig_gap, height=420, legend_below=False, title_has_subtitle=True)
+    fig_gap.update_layout(
+        margin=dict(l=120, r=80, t=88, b=40),
+        xaxis=dict(tickprefix="$", tickformat=",.0f"),
+    )
+
+    # Build companion table data for the funding gap chart
+    gap_table_df = gap_df[["Municipality", "Funding_Gap", "Explanation"]].copy()
+    gap_table_df = gap_table_df.sort_values("Funding_Gap", ascending=False)
+    gap_table_df["Funding_Gap"] = gap_table_df["Funding_Gap"].apply(lambda v: f"${v:,.0f}")
+    gap_table_records = gap_table_df.rename(columns={
+        "Municipality": "Department",
+        "Funding_Gap": "Gap Amount",
+        "Explanation": "How They Cover It",
+    }).to_dict("records")
+
+    return fig_b, fig_bill, fig_cpc, fig_epc, fig_gap, gap_table_records
 
 
 # ── Inter-Municipal Contract Payments ────────────────────────────────────────
@@ -4753,7 +5755,124 @@ def _get_asset_figs():
     tbl_data = tbl.to_dict("records")
     tbl_cols = [{"name": c, "id": c} for c in tbl.columns]
 
-    return fig_amb, fig_fleet, fig_age, fig_pers, tbl_data, tbl_cols
+    # ── Chart 5: EMS Calls per Ambulance (utilization efficiency) ─────
+    util = ad[(ad["Ambulances"] > 0) & (ad["EMS_Calls"] > 0)].copy()
+    util["Calls_Per_Amb"] = util["EMS_Calls"] / util["Ambulances"]
+    util["Population"] = util["Municipality"].map(SERVICE_AREA_POP)
+    util = util.sort_values("Calls_Per_Amb", ascending=True)
+
+    # Green = high utilization (good), Yellow = moderate, Red = underutilized
+    def _utilization_color(cpa):
+        if cpa >= 400:  return C_GREEN
+        if cpa >= 200:  return C_YELLOW
+        return C_RED
+
+    fig_cpa = go.Figure(go.Bar(
+        y=util["Municipality"], x=util["Calls_Per_Amb"],
+        orientation="h",
+        marker_color=util["Calls_Per_Amb"].apply(_utilization_color).tolist(),
+        text=util["Calls_Per_Amb"].apply(lambda v: f"{v:.0f}"),
+        textposition="outside",
+        customdata=util[["EMS_Calls", "Ambulances", "Population"]].values,
+        hovertemplate=(
+            "<b>%{y}</b><br>"
+            "Calls/Ambulance: %{x:.0f}<br>"
+            "EMS Calls: %{customdata[0]:,.0f}<br>"
+            "Ambulances: %{customdata[1]}<br>"
+            "Service Pop: %{customdata[2]:,.0f}<extra></extra>"
+        ),
+    ))
+    med_cpa = util["Calls_Per_Amb"].median()
+    fig_cpa.add_vline(
+        x=med_cpa, line_dash="dash", line_color=C_MUTED,
+        annotation_text=f"County median: {med_cpa:.0f}",
+        annotation_font_color=C_MUTED,
+        annotation_position="top right",
+    )
+    # CMS GADCS national benchmark: ~1,147 transports/unit (government EMS mean)
+    fig_cpa.add_vline(
+        x=1147, line_dash="dot", line_color=C_YELLOW,
+        annotation_text="CMS national avg: 1,147",
+        annotation_font_color=C_YELLOW,
+        annotation_position="bottom right",
+    )
+    fig_cpa.update_layout(
+        title="EMS Calls per Ambulance<br><sup>Higher = better utilization (green \u2265400 | yellow 200\u2013399 | red <200) \u2014 CMS GADCS 2024 national avg shown</sup>",
+        xaxis_title="Annual EMS Calls per Ambulance",
+        yaxis_title="",
+    )
+    _apply_chart_style(fig_cpa, height=400, title_has_subtitle=True)
+    fig_cpa.update_layout(margin=dict(l=120, r=60, t=70, b=30))
+
+    # ── Chart 6: Ambulances per 10K Population (resource density) ────
+    # Exclude Lake Mills: 3 MABAS-listed ambulances but Ryan Brothers provides
+    # transport since 2023 EMS nonprofit closure. LMFD units are BLS support only.
+    pop_util = ad[(ad["Ambulances"] > 0) & (ad["Municipality"] != "Lake Mills")].copy()
+    pop_util["Population"] = pop_util["Municipality"].map(SERVICE_AREA_POP)
+    pop_util = pop_util.dropna(subset=["Population"])
+    pop_util["Amb_Per_10K"] = pop_util["Ambulances"] / pop_util["Population"] * 10000
+    pop_util = pop_util.sort_values("Amb_Per_10K", ascending=True)
+
+    def _density_color(a10k):
+        if a10k < 1.0:  return C_RED
+        if a10k <= 2.0: return C_YELLOW
+        return C_GREEN
+
+    fig_a10k = go.Figure(go.Bar(
+        y=pop_util["Municipality"], x=pop_util["Amb_Per_10K"],
+        orientation="h",
+        marker_color=pop_util["Amb_Per_10K"].apply(_density_color).tolist(),
+        text=pop_util["Amb_Per_10K"].apply(lambda v: f"{v:.1f}"),
+        textposition="outside",
+        customdata=pop_util[["Ambulances", "Population"]].values,
+        hovertemplate=(
+            "<b>%{y}</b><br>"
+            "Amb/10K Pop: %{x:.2f}<br>"
+            "Ambulances: %{customdata[0]}<br>"
+            "Service Pop: %{customdata[1]:,.0f}<extra></extra>"
+        ),
+    ))
+    med_a10k = pop_util["Amb_Per_10K"].median()
+    fig_a10k.add_vline(
+        x=med_a10k, line_dash="dash", line_color=C_MUTED,
+        annotation_text=f"County median: {med_a10k:.1f}",
+        annotation_font_color=C_MUTED,
+        annotation_position="top right",
+    )
+    # Annotate Whitewater — Jeff Co. portion only, full service area is ~15K
+    if "Whitewater" in pop_util["Municipality"].values:
+        ww_val = pop_util.loc[pop_util["Municipality"] == "Whitewater", "Amb_Per_10K"].iloc[0]
+        fig_a10k.add_annotation(
+            x=ww_val, y="Whitewater",
+            text="Jeff Co. portion only (4,296 of ~15,000 served)",
+            showarrow=True, ax=0, ay=-30,
+            font=dict(size=9, color=C_MUTED),
+            arrowcolor=C_MUTED, arrowwidth=1,
+        )
+    fig_a10k.update_layout(
+        title="Ambulances per 10K Population<br><sup>Resource density by service area — excludes Lake Mills (Ryan Brothers transports)</sup>",
+        xaxis_title="Ambulances per 10,000 Residents",
+        yaxis_title="",
+    )
+    _apply_chart_style(fig_a10k, height=400, title_has_subtitle=True)
+    fig_a10k.update_layout(margin=dict(l=120, r=60, t=70, b=30))
+
+    # ── KPI summary dict ─────────────────────────────────────────────
+    total_amb = int(_JEFF_TOTAL_AMBULANCES)
+    # Avg uses only depts with NFIRS EMS data (excludes Lake Mills — Ryan Brothers)
+    util_amb = int(util["Ambulances"].sum())
+    total_ems_amb_depts = int(util["EMS_Calls"].sum())
+    avg_cpa = total_ems_amb_depts / util_amb if util_amb else 0
+    county_a10k_val = total_amb / _BENCH["jeff_county_pop"] * 10000
+    n_amb_depts = len(ad[ad["Ambulances"] > 0])
+    asset_kpis = {
+        "total_ambulances": str(total_amb),
+        "avg_calls_per_amb": f"{avg_cpa:.0f}",
+        "county_amb_per_10k": f"{county_a10k_val:.1f}",
+        "n_depts_with_amb": str(n_amb_depts),
+    }
+
+    return fig_amb, fig_fleet, fig_age, fig_pers, tbl_data, tbl_cols, fig_cpa, fig_a10k, asset_kpis
 
 
 # FIX 12: Individual department drill-down callback
@@ -4916,13 +6035,18 @@ def _build_util_df():
     merged["Tax_Per_Capita"]     = (merged["Net_Tax"]       / merged["Population"]).round(0)
     merged["Revenue_Per_Capita"] = (merged["EMS_Revenue"]   / merged["Population"]).round(0)
 
-    # Outlier flags (each flag = 1 when metric is extreme)
-    cost_thresh = merged["Cost_Per_Call"].median() * 2
-    merged["Flag_Cost"]     = (merged["Cost_Per_Call"] > cost_thresh).astype(int)
-    merged["Flag_Tax"]      = (merged["Tax_Per_Call"]  > 1000).astype(int)
-    merged["Flag_Volume"]   = (merged["Total_Calls"]   < 300).astype(int)
-    merged["Flag_Recovery"] = (merged["Revenue_Recovery"] < 15).astype(int)
-    merged["Flag_Staff"]    = (merged["EMS_Per_Staff"] < 5).astype(int)
+    # Outlier flags — percentile-based thresholds (75th/25th) so they
+    # adapt to the actual distribution rather than arbitrary cut-offs.
+    _p75_cost = merged["Cost_Per_Call"].quantile(0.75)
+    _p75_tax  = merged["Tax_Per_Call"].quantile(0.75)
+    _p25_vol  = merged["Total_Calls"].quantile(0.25)
+    _p25_rec  = merged["Revenue_Recovery"].quantile(0.25)
+    _p25_staff = merged["EMS_Per_Staff"].quantile(0.25)
+    merged["Flag_Cost"]     = (merged["Cost_Per_Call"]    > _p75_cost).astype(int)
+    merged["Flag_Tax"]      = (merged["Tax_Per_Call"]     > _p75_tax).astype(int)
+    merged["Flag_Volume"]   = (merged["Total_Calls"]      < _p25_vol).astype(int)
+    merged["Flag_Recovery"] = (merged["Revenue_Recovery"] < _p25_rec).astype(int)
+    merged["Flag_Staff"]    = (merged["EMS_Per_Staff"]    < _p25_staff).astype(int)
     merged["Flags"]         = (merged[["Flag_Cost","Flag_Tax","Flag_Volume",
                                         "Flag_Recovery","Flag_Staff"]].sum(axis=1))
 
@@ -4983,7 +6107,8 @@ def _get_utilization_figs():
 
     # ── Chart 2: Revenue recovery rate ─────────────────────────────────────────
     u2 = u.dropna(subset=["Revenue_Recovery"]).sort_values("Revenue_Recovery", ascending=False)
-    rec_colors = [C_GREEN if v >= 80 else C_ORANGE if v >= 30 else C_RED
+    _rr_q = u2["Revenue_Recovery"].quantile([0.25, 0.5, 0.75])
+    rec_colors = [C_GREEN if v >= _rr_q[0.75] else C_ORANGE if v >= _rr_q[0.25] else C_RED
                   for v in u2["Revenue_Recovery"]]
     fig2 = go.Figure(go.Bar(
         x=u2["Municipality"], y=u2["Revenue_Recovery"],
@@ -5021,8 +6146,9 @@ def _get_utilization_figs():
 
     # ── Chart 3: Tax subsidy per call ──────────────────────────────────────────
     u3 = u.dropna(subset=["Tax_Per_Call"]).sort_values("Tax_Per_Call", ascending=False)
-    tax_colors = [C_RED if v > 5000 else C_ORANGE if v > 1000 else
-                  C_YELLOW if v > 500 else C_GREEN for v in u3["Tax_Per_Call"]]
+    _tpc_q = u3["Tax_Per_Call"].quantile([0.25, 0.5, 0.75])
+    tax_colors = [C_RED if v > _tpc_q[0.75] else C_ORANGE if v > _tpc_q[0.5] else
+                  C_YELLOW if v > _tpc_q[0.25] else C_GREEN for v in u3["Tax_Per_Call"]]
     fig3 = go.Figure(go.Bar(
         x=u3["Municipality"], y=u3["Tax_Per_Call"],
         marker_color=tax_colors,
@@ -5047,8 +6173,9 @@ def _get_utilization_figs():
         margin=dict(l=60, r=100, t=60, b=130),
         xaxis=dict(tickangle=-40, automargin=True, tickfont=dict(size=12, color=C_TEXT)),
     )
-    fig3.add_hline(y=1000, line_dash="dash", line_color=C_ORANGE,
-                   annotation_text="$1,000 flag threshold",
+    _p75_tax_chart = u3["Tax_Per_Call"].quantile(0.75)
+    fig3.add_hline(y=_p75_tax_chart, line_dash="dash", line_color=C_ORANGE,
+                   annotation_text=f"75th pctl ${_p75_tax_chart:,.0f}",
                    annotation_font_color=C_ORANGE,
                    annotation_position="right")
 
@@ -5157,10 +6284,11 @@ def _get_utilization_figs():
     # ── Chart 6: Tax Per Capita (companion to Chart 3 Tax Per Call) ────────────
     # Drops depts where Tax_Per_Capita is NaN (Edgerton: multi-county budget; Lake Mills: Net_Tax=full)
     u6 = u.dropna(subset=["Tax_Per_Capita"]).sort_values("Tax_Per_Capita", ascending=False)
+    _tc_q = u6["Tax_Per_Capita"].quantile([0.25, 0.5, 0.75])
     tpc_colors = [
-        C_RED    if v > 150 else
-        C_ORANGE if v > 100 else
-        C_YELLOW if v > 50  else
+        C_RED    if v > _tc_q[0.75] else
+        C_ORANGE if v > _tc_q[0.5]  else
+        C_YELLOW if v > _tc_q[0.25] else
         C_GREEN
         for v in u6["Tax_Per_Capita"]
     ]
@@ -5191,8 +6319,11 @@ def _get_utilization_figs():
     fig6.update_layout(
         title=(
             "Taxpayer Burden Per Resident (Net Tax \u00f7 Service Area Population)"
-            "<br><sup>WI avg EMS user fee: $36/capita  \u00b7  "
-            "Green <$50 \u00b7 Yellow $50\u2013$100 \u00b7 Orange $100\u2013$150 \u00b7 Red >$150</sup>"
+            f"<br><sup>WI avg EMS user fee: $36/capita  \u00b7  "
+            f"Color = quartile  \u00b7  Green <${_tc_q[0.25]:,.0f}  \u00b7  "
+            f"Yellow ${_tc_q[0.25]:,.0f}\u2013${_tc_q[0.5]:,.0f}  \u00b7  "
+            f"Orange ${_tc_q[0.5]:,.0f}\u2013${_tc_q[0.75]:,.0f}  \u00b7  "
+            f"Red >${_tc_q[0.75]:,.0f}</sup>"
         ),
         xaxis_title="Net tax dollars per resident",
         xaxis_tickprefix="$",
@@ -5278,33 +6409,148 @@ def _get_utilization_figs():
     )
 
     # ── Outlier table ──────────────────────────────────────────────────────────
+    # Compute threshold labels from the actual data for transparency
+    _p75c = u["Cost_Per_Call"].quantile(0.75)
+    _p75t = u["Tax_Per_Call"].quantile(0.75)
+    _p25v = u["Total_Calls"].quantile(0.25)
+    _p25r = u["Revenue_Recovery"].quantile(0.25)
+    _p25s = u["EMS_Per_Staff"].quantile(0.25)
     flag_map = {
-        "Flag_Cost":     "High cost/call",
-        "Flag_Tax":      "High tax/call (>$1K)",
-        "Flag_Volume":   "Low volume (<300 calls)",
-        "Flag_Recovery": "Low recovery (<15%)",
-        "Flag_Staff":    "Low staff util (<5 EMS/staff)",
+        "Flag_Cost":     f"Cost/call > ${_p75c:,.0f} (75th pctl)",
+        "Flag_Tax":      f"Tax/call > ${_p75t:,.0f} (75th pctl)",
+        "Flag_Volume":   f"Volume < {_p25v:,.0f} calls (25th pctl)",
+        "Flag_Recovery": f"Recovery < {_p25r:.0f}% (25th pctl)",
+        "Flag_Staff":    f"Staff util < {_p25s:.0f} EMS/staff (25th pctl)",
     }
     rows = []
     for _, r in u.iterrows():
-        if r["Flags"] == 0:
+        if r["Flags"] < 2:          # only show departments with 2+ flags
             continue
         active_flags = [lbl for col, lbl in flag_map.items() if r.get(col, 0) == 1]
         rows.append({
             "Department":       r["Municipality"],
-            "Flags":            int(r["Flags"]),
-            "Active Flags":     " · ".join(active_flags),
+            "# Flags":          int(r["Flags"]),
+            "Why Flagged":      " · ".join(active_flags),
             "Cost/Call":        f"${r['Cost_Per_Call']:,.0f}" if pd.notna(r.get("Cost_Per_Call")) else "—",
-            "Revenue Recovery": f"{r['Revenue_Recovery']:.1f}%" if pd.notna(r.get("Revenue_Recovery")) else "—",
+            "Recovery %":       f"{r['Revenue_Recovery']:.1f}%" if pd.notna(r.get("Revenue_Recovery")) else "—",
             "Tax/Call":         f"${r['Tax_Per_Call']:,.0f}" if pd.notna(r.get("Tax_Per_Call")) else "—",
             "Total Calls":      f"{int(r['Total_Calls']):,}" if pd.notna(r.get("Total_Calls")) else "—",
-            "Service Level":    r.get("Service_Level","—"),
+            "Level":            r.get("Service_Level","—"),
         })
-    rows.sort(key=lambda x: -x["Flags"])
+    rows.sort(key=lambda x: -x["# Flags"])
     cols = [{"name": c, "id": c} for c in
-            ["Department","Flags","Active Flags","Cost/Call","Revenue Recovery",
-             "Tax/Call","Total Calls","Service Level"]]
+            ["Department","# Flags","Why Flagged","Cost/Call","Recovery %",
+             "Tax/Call","Total Calls","Level"]]
     return fig1, fig2, fig3, fig4, fig5, rows, cols, fig6, fig7
+
+
+# ── NEW: Peterson 24/7 ALS Waterfall ──────────────────────────────────────────
+@lru_cache(maxsize=1)
+def _get_fig_peterson_waterfall():
+    fig = go.Figure(go.Waterfall(
+        orientation="v",
+        measure=_PETERSON_COST_MODEL["measures"],
+        x=_PETERSON_COST_MODEL["labels"],
+        y=_PETERSON_COST_MODEL["values"],
+        textposition="outside",
+        text=[f"${abs(v):,.0f}" if v != 0 else "" for v in _PETERSON_COST_MODEL["values"]],
+        hovertext=_PETERSON_COST_MODEL["notes"],
+        connector={"line": {"color": C_BORDER}},
+        increasing={"marker": {"color": C_PRIMARY}},
+        decreasing={"marker": {"color": C_GREEN}},
+        totals={"marker": {"color": C_YELLOW}},
+    ))
+    fig.update_layout(
+        title="Chief Peterson's 24/7 ALS Single-Unit Cost Model"
+              "<br><sup>Source: 25-1210 JC EMS Workgroup Cost Projection.pdf  |  "
+              "6 FTEs (3 Paramedics + 3 EMT-A)  |  24/48 schedule  |  700 calls/yr</sup>",
+        yaxis_title="$ Amount",
+        yaxis_tickprefix="$",
+        yaxis_separatethousands=True,
+    )
+    _apply_chart_style(fig, height=520, title_has_subtitle=True)
+    fig.update_layout(margin=dict(l=60, r=40, t=85, b=120),
+                      xaxis=dict(tickangle=-35))
+    return fig
+
+
+# ── NEW: Contract Timeline Gantt + Escalation Line ────────────────────────────
+@lru_cache(maxsize=1)
+def _get_fig_contract_timeline():
+    # --- Gantt chart ---
+    status_colors = {
+        "EXPIRED":               C_RED,
+        "Auto-renewed":          C_YELLOW,
+        "Active":                C_GREEN,
+        "Active (rolling 3-yr)": C_GREEN,
+        "Expired (1-yr)":        C_RED,
+    }
+    ct = _CONTRACT_TIMELINE.copy()
+    ct["Duration"] = (ct["End"] - ct["Start"]).dt.days
+    fig_gantt = go.Figure()
+    for _, row in ct.iterrows():
+        fig_gantt.add_trace(go.Bar(
+            y=[row["Contract"]], x=[row["Duration"]],
+            base=[row["Start"]],
+            orientation="h",
+            marker_color=status_colors.get(row["Status"], C_MUTED),
+            hovertemplate=(
+                f"<b>{row['Contract']}</b><br>"
+                f"Status: {row['Status']}<br>"
+                f"{row['Start'].strftime('%b %Y')} - {row['End'].strftime('%b %Y')}"
+                "<extra></extra>"
+            ),
+            showlegend=False,
+        ))
+    # Add a "today" vertical line
+    fig_gantt.add_vline(
+        x=pd.Timestamp("2026-03-03"),
+        line_dash="dash",
+        line_color=C_TEXT,
+        line_width=1,
+        annotation_text="Today",
+        annotation_position="top",
+    )
+    fig_gantt.update_layout(
+        title="Contract Expiration Timeline"
+              "<br><sup>Source: IGA contract text files  |  "
+              "Red = Expired  |  Yellow = Auto-renewed  |  Green = Active</sup>",
+        xaxis=dict(type="date", title=""),
+        yaxis=dict(title="", autorange="reversed"),
+        barmode="overlay",
+    )
+    _apply_chart_style(fig_gantt, height=420, title_has_subtitle=True)
+
+    # --- Per-capita escalation line chart ---
+    fig_esc = go.Figure()
+    _esc_colors = {
+        "Jefferson City -> 5 Towns": C_PRIMARY,
+        "Waterloo -> Milford":       C_YELLOW,
+        "Fort Atkinson -> Towns":    C_RED,
+        "Lake Mills / Ryan Bros":    C_GREEN,
+        "Ixonia -> Watertown Twp":   "#A78BFA",
+    }
+    for contract, grp in _CONTRACT_ESCALATION.groupby("Contract"):
+        grp = grp.sort_values("Year")
+        dash = "dash" if "EXPIRED" in grp["Status"].values[0] else "solid"
+        fig_esc.add_trace(go.Scatter(
+            x=grp["Year"], y=grp["Rate"],
+            mode="lines+markers",
+            name=contract,
+            line=dict(color=_esc_colors.get(contract, C_MUTED), width=2.5, dash=dash),
+            marker=dict(size=8),
+            hovertemplate=f"<b>{contract}</b><br>%{{x}}: $%{{y:.2f}}/capita<extra></extra>",
+        ))
+    fig_esc.update_layout(
+        title="Contract Per-Capita Rate Escalation (2023-2027)"
+              "<br><sup>Source: Contract text files  |  Dashed = expired contracts</sup>",
+        xaxis=dict(title="Year", dtick=1),
+        yaxis=dict(title="$/capita", tickprefix="$"),
+        legend=dict(orientation="h", yanchor="bottom", y=-0.35, xanchor="center", x=0.5),
+    )
+    _apply_chart_style(fig_esc, height=440, legend_below=True, title_has_subtitle=True)
+
+    return fig_gantt, fig_esc
 
 
 # ── 10. Run ─────────────────────────────────────────────────────────────────────
