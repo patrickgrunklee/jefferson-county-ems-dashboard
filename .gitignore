@@ -31,3 +31,9 @@ jeff_ems_cache/
 
 # MABAS asset files (reference only — data is embedded in app)
 MABAS_Assets/
+
+# Environment secrets
+.env
+
+# Isochrone API cache
+isochrone_cache/

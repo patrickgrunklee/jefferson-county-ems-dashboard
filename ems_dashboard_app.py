@@ -78,6 +78,16 @@ _MONTH_STR_TO_INT = {
     "Jul": 7, "Aug": 8, "Sep": 9,  "Oct": 10, "Nov": 11, "Dec": 12,
 }
 
+# NFIRS files store "Alarm Date - Day of Week" as 3-letter abbreviations
+# ("Sun", "Mon", ...) — normalize to full names for consistent display.
+_DOW_STR_TO_FULL = {
+    "Sun": "Sunday", "Mon": "Monday", "Tue": "Tuesday",
+    "Wed": "Wednesday", "Thu": "Thursday", "Fri": "Friday", "Sat": "Saturday",
+    # Also accept full names in case some files differ
+    "Sunday": "Sunday", "Monday": "Monday", "Tuesday": "Tuesday",
+    "Wednesday": "Wednesday", "Thursday": "Thursday", "Friday": "Friday", "Saturday": "Saturday",
+}
+
 def _xlsx_fingerprint():
     """Hash of xlsx file names + mtimes for cache invalidation."""
     parts = []
@@ -149,6 +159,14 @@ if "Department" not in raw.columns:
     raw["Hour"]       = pd.to_numeric(raw["Alarm Date - Hour of Day"],   errors="coerce")
     raw["RT"]         = pd.to_numeric(raw["Response Time (Minutes)"],    errors="coerce")
     raw["IsEMS"]      = raw["Incident Type Code Category Description"].str.startswith("Rescue and EMS", na=False)
+
+# Normalize DOW abbreviations to full weekday names — NFIRS files use 3-letter strings
+# ("Sun", "Mon", ...) but the heatmap expects full names for the reindex step.
+# Map first, then fill any unmapped values with the original string (preserve unknown values).
+if "Alarm Date - Day of Week" in raw.columns:
+    _dow_orig = raw["Alarm Date - Day of Week"].astype(str)
+    _dow_mapped = _dow_orig.map(_DOW_STR_TO_FULL)
+    raw["Alarm Date - Day of Week"] = _dow_mapped.where(_dow_mapped.notna(), _dow_orig)
 
 rt_clean = raw[raw["RT"].between(0, 60)].copy()
 
@@ -246,9 +264,12 @@ budget = pd.DataFrame([
     {"Municipality": "Lake Mills",    "FY": 2025, "Total_Expense": 347000,  "EMS_Revenue": 8000,    "Net_Tax": 347000,  "Model": "Career+Vol",    "Staff_FT": 4,  "Staff_PT": 20},
 
     # Waterloo: FY2025. Fire Dept Fund 220 (balanced). Tax shares from City + Towns = Net_Tax.
-    # EMS_Revenue = EMS runs billing (commercial budget figure). Staffing from wage lines.
-    # Source: City of Waterloo fire_dept_2025.pdf.
-    {"Municipality": "Waterloo",      "FY": 2025, "Total_Expense": 1102475, "EMS_Revenue": 200000,  "Net_Tax": 557475,  "Model": "Career+Vol",    "Staff_FT": 3,  "Staff_PT": 15},
+    # EMS_Revenue = EMS runs billing (commercial budget figure).
+    # Staffing corrected per Waterloo Fire Chief interview (Mar 11 2026): 4 FT (EMS primary),
+    # 22 PT/per-call EMS-eligible (10 EMS-only + 12 cross-trained); 20 fire-only not counted.
+    # PT are mainly per-call volunteers — small share of budget. Chief says need 6 FT for 24/7.
+    # Source: City of Waterloo fire_dept_2025.pdf + Chief interview 3/11/26.
+    {"Municipality": "Waterloo",      "FY": 2025, "Total_Expense": 1102475, "EMS_Revenue": 200000,  "Net_Tax": 557475,  "Model": "Career+Vol",    "Staff_FT": 4,  "Staff_PT": 22},
 
     # Johnson Creek: FY2025. Fire-EMS Fund 210 total. ALS (Paramedic) — 24/7 ALS ambulance confirmed.
     # ~40 part-time + 3 FT staff including paramedics (web research, johnsoncreekfiredept.com).
@@ -818,10 +839,10 @@ _geojson_style = assign("""function(feature, context) {
     var dept = feature.properties.dept || feature.properties.NAME;
     var cm = context.hideout.colorMap || {};
     return {
-        fillColor: cm[dept] || '#3A3D42',
-        color: '#5C5C5C',
+        fillColor: cm[dept] || '#CBD5E1',
+        color: '#334155',
         weight: 1.5,
-        fillOpacity: 0.45,
+        fillOpacity: 0.50,
     };
 }""")
 
@@ -852,9 +873,9 @@ _zcta_style_dynamic = assign("""function(feature, context) {
     var cm = (context.hideout || {}).zipColorMap || {};
     var c = cm[z];
     if (c) {
-        return {fillColor: c, color: 'rgba(123,31,162,0.5)', weight: 1, fillOpacity: 0.30, dashArray: ''};
+        return {fillColor: c, color: 'rgba(71,21,110,0.65)', weight: 1, fillOpacity: 0.30, dashArray: ''};
     }
-    return {fillColor: 'transparent', color: 'rgba(123,31,162,0.25)', weight: 0.5, fillOpacity: 0, dashArray: '4 3'};
+    return {fillColor: 'transparent', color: 'rgba(71,21,110,0.30)', weight: 0.5, fillOpacity: 0, dashArray: '4 3'};
 }""")
 # Dynamic ZCTA tooltip: only shown for ZIPs with data, kept minimal
 _zcta_label_dynamic = assign("""function(feature, layer) {
@@ -2493,8 +2514,8 @@ def render_tab(tab):
                         style={"width": "100%", "height": "580px", "borderRadius": "8px"},
                         children=[
                             dl.TileLayer(
-                                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-                                attribution='&copy; OpenStreetMap &copy; CARTO'),
+                                url="https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png",
+                                attribution='&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors'),
                             dl.GeoJSON(id="map-geojson", data=geojson_data,
                                 options=dict(style=_geojson_style),
                                 zoomToBoundsOnClick=True,
@@ -2509,10 +2530,10 @@ def render_tab(tab):
                         ]),
                     html.Div(id="zoom-badge", children="Department View", style={
                         "position": "absolute", "top": "10px", "right": "60px", "zIndex": "1000",
-                        "background": "rgba(36,39,43,0.92)", "padding": "4px 12px",
+                        "background": "rgba(255,255,255,0.92)", "padding": "4px 12px",
                         "borderRadius": "4px", "fontSize": "11px", "fontWeight": "600",
-                        "fontFamily": FONT_STACK, "boxShadow": "0 1px 4px rgba(0,0,0,.3)",
-                        "color": C_PRIMARY}),
+                        "fontFamily": FONT_STACK, "boxShadow": "0 1px 4px rgba(0,0,0,.18)",
+                        "color": C_PRIMARY, "border": "1px solid rgba(0,0,0,0.08)"}),
                     html.Div(id="map-legend", style={
                         "position": "absolute", "bottom": "16px", "left": "16px", "zIndex": "1000",
                         "background": C_CARD, "padding": "8px 14px", "borderRadius": "6px",
@@ -2552,8 +2573,8 @@ def render_tab(tab):
                 _section_header("Call Volume — 2024 NFIRS Data"),
                 # Row 1: raw stacked volume — full width so all 15 depts are readable
                 dcc.Graph(id="vol-bar"),
-                # Row 2: population-normalized — full width; log scale handles Western Lakes outlier
-                _sub_header("Calls per 1,000 Population (log scale — Western Lakes outlier noted)"),
+                # Row 2: population-normalized — full width; Western Lakes bar is capped for readability
+                _sub_header("Calls per 1,000 Population (Western Lakes bar capped — see annotation)"),
                 dcc.Graph(id="vol-norm-bar"),
                 # Row 3: EMS share bar — full width for readability
                 _sub_header("EMS Share of Total Calls"),
@@ -2668,8 +2689,7 @@ def render_tab(tab):
                 _section_header("Budget & Billing Rates — FY2025 Budget"),
                 # Sankey diagram — full width
                 dcc.Graph(id="budget-bar", figure=_bf[0], config=_g_cfg),
-                # Funding gap breakdown — chart + explanation table
-                dcc.Graph(id="funding-gap-bar", figure=_bf[4], config=_g_cfg),
+                # Funding gap breakdown — table only (bar removed per user request; table is sufficient)
                 dash_table.DataTable(
                     id="funding-gap-table",
                     columns=[
@@ -3734,7 +3754,7 @@ def update_map(metric, selected_depts, viewport, tab, active_layers):
         ]
     # Add ZIP choropleth note to legend when showing dynamic boundaries
     if show_zcta:
-        legend.append(html.Div(style={"borderTop": "1px solid rgba(255,255,255,0.15)",
+        legend.append(html.Div(style={"borderTop": "1px solid rgba(0,0,0,0.12)",
                                        "margin": "6px 0 4px"}))
         legend.append(html.Div("ZIP fill = same metric", style={"color": C_MUTED, "fontSize": "10px"}))
 
@@ -3747,7 +3767,7 @@ def update_map(metric, selected_depts, viewport, tab, active_layers):
     badge = html.Span([
         html.Span(tier_labels[tier], style={"fontWeight": "700"}),
         html.Span(f"  \u00b7  {tier_hints[tier]}",
-                  style={"fontWeight": "400", "color": "rgba(255,255,255,0.5)", "fontSize": "10px"}),
+                  style={"fontWeight": "400", "color": "rgba(0,0,0,0.45)", "fontSize": "10px"}),
     ])
 
     return markers, hideout, legend, badge, zcta_children
@@ -4041,22 +4061,36 @@ def update_vol(depts, tab):
                 hoverinfo="skip",
             ))
 
+    # Western Lakes is a Waukesha Co. district — its 2,212/1K value represents the full
+    # district, not Jefferson Co. alone (~200-250 actual Jeff Co. calls).  Clip the bar
+    # at a display cap so the other 14 departments are readable on a linear scale, then
+    # annotate the true value directly on the clipped bar.
+    _WL_DISPLAY_CAP = 450   # clip Western Lakes for readability on linear axis
+    _wl_true_val = None
+    if "Western Lakes" in cv_norm["Department"].values:
+        _wl_mask = cv_norm["Department"] == "Western Lakes"
+        _wl_true_val = cv_norm.loc[_wl_mask, "Calls_per_1K"].values[0]
+        if pd.notna(_wl_true_val) and _wl_true_val > _WL_DISPLAY_CAP:
+            x_vals = [min(v, _WL_DISPLAY_CAP) if cv_norm["Department"].iloc[i] == "Western Lakes"
+                      else v for i, v in enumerate(x_vals)]
+            text_labels = [
+                f"→ {int(_wl_true_val):,}/1K (full district; ~200-250 Jeff Co. only)"
+                if row["Department"] == "Western Lakes" and pd.notna(row["Calls_per_1K"])
+                else lbl
+                for lbl, (_, row) in zip(text_labels, cv_norm.iterrows())
+            ]
+
     fig3.update_layout(
         title="Calls per 1,000 Population — 2024 NFIRS Data<br>"
-              "<sup>Log scale  ·  Color = service level  ·  Dashed = WI avg (254/1K)  ·  "
-              "Western Lakes ~2,200/1K = full Waukesha Co. district (not Jefferson Co.-only)</sup>",
+              "<sup>Linear scale  ·  Color = service level  ·  Dashed = WI avg (254/1K)  ·  "
+              "Western Lakes bar capped — true value ~2,212/1K (full Waukesha Co. district)</sup>",
         yaxis_title="",
     )
-    # Log scale applied AFTER _apply_chart_style so it is not overwritten by the helper.
-    # Taller height (560px) gives each of 15 departments ~37px of bar space.
     _apply_chart_style(fig3, height=560, legend_below=False, title_has_subtitle=True)
     fig3.update_layout(
-        margin=dict(l=145, r=135, t=88, b=30),
+        margin=dict(l=145, r=200, t=88, b=30),
         xaxis=dict(
-            type="log",
-            title="Calls per 1,000 Population (log scale)",
-            tickvals=[10, 30, 100, 200, 300, 500, 1000, 2000, 3000],
-            ticktext=["10", "30", "100", "200", "300", "500", "1,000", "2,000", "3,000"],
+            title="Calls per 1,000 Population",
             gridcolor=C_BORDER, showline=False, zeroline=False,
             tickfont=dict(size=12, color=C_TEXT),
             title_font=dict(size=12, color=C_MUTED),
@@ -4068,10 +4102,13 @@ def update_vol(depts, tab):
         categoryorder="array",
         categoryarray=cv_norm["Department"].tolist(),
     )
-    # Callout annotation for Western Lakes outlier
+    # Callout annotation for Western Lakes outlier (banner at bottom-right)
     fig3.add_annotation(
         x=0.99, y=0.01, xref="paper", yref="paper",
-        text="Western Lakes ~2,212/1K = full Waukesha Co. district; Jefferson Co. incidents ~200-250",
+        text=(
+            "Western Lakes ~2,212/1K = full Waukesha Co. district; "
+            "Jefferson Co. incidents ~200-250 only"
+        ),
         showarrow=False,
         font=dict(size=10, color=C_YELLOW),
         xanchor="right", yanchor="bottom",
@@ -4079,6 +4116,9 @@ def update_vol(depts, tab):
         bordercolor=C_YELLOW, borderwidth=1,
         borderpad=5,
     )
+    # Update the bar trace now that x_vals and text_labels may have changed
+    fig3.data[0].x = x_vals
+    fig3.data[0].text = text_labels
 
     # ── Chart 3 (was fig2): EMS % horizontal bar ────────────────────────────
     fig2 = px.bar(
@@ -4183,32 +4223,65 @@ def update_rt(depts, tab):
         P90=lambda x: x.quantile(.90),
     ).reset_index().sort_values("P50")
 
-    fig1 = go.Figure([
-        go.Bar(x=stats["Department"], y=stats["P50"], name="Median (P50)",
-               marker_color=C_GREEN,
-               text=stats["P50"].round(1), textposition="outside",
-               texttemplate="%{text:.1f}",
-               hovertemplate="<b>%{x}</b><br>Median: %{y:.1f} min<extra></extra>"),
-        go.Bar(x=stats["Department"], y=stats["P75"], name="P75",
-               marker_color=C_ORANGE,
-               text=stats["P75"].round(1), textposition="outside",
-               texttemplate="%{text:.1f}",
-               hovertemplate="<b>%{x}</b><br>P75: %{y:.1f} min<extra></extra>"),
-        go.Bar(x=stats["Department"], y=stats["P90"], name="P90",
-               marker_color=C_RED,
-               text=stats["P90"].round(1), textposition="outside",
-               texttemplate="%{text:.1f}",
-               hovertemplate="<b>%{x}</b><br>P90: %{y:.1f} min<extra></extra>"),
-    ])
+    # Dot plot (lollipop style): more appropriate than grouped bars for percentiles.
+    # Each department shows P50 / P75 / P90 as stacked dots on a vertical stem.
+    fig1 = go.Figure()
+    # Vertical stems from 0 to P90 for each department (drawn as thin gray lines)
+    for _, row in stats.iterrows():
+        fig1.add_trace(go.Scatter(
+            x=[row["Department"], row["Department"]],
+            y=[0, row["P90"]],
+            mode="lines",
+            line=dict(color=C_BORDER, width=1.5),
+            showlegend=False,
+            hoverinfo="skip",
+        ))
+    # P90 dots
+    fig1.add_trace(go.Scatter(
+        x=stats["Department"], y=stats["P90"],
+        mode="markers+text",
+        name="P90",
+        marker=dict(color=C_RED, size=11, symbol="circle"),
+        text=stats["P90"].round(1).astype(str),
+        textposition="top center",
+        textfont=dict(size=9, color=C_RED),
+        hovertemplate="<b>%{x}</b><br>P90: %{y:.1f} min<extra></extra>",
+    ))
+    # P75 dots
+    fig1.add_trace(go.Scatter(
+        x=stats["Department"], y=stats["P75"],
+        mode="markers+text",
+        name="P75",
+        marker=dict(color=C_ORANGE, size=11, symbol="circle"),
+        text=stats["P75"].round(1).astype(str),
+        textposition="top center",
+        textfont=dict(size=9, color=C_ORANGE),
+        hovertemplate="<b>%{x}</b><br>P75: %{y:.1f} min<extra></extra>",
+    ))
+    # P50 (median) dots
+    fig1.add_trace(go.Scatter(
+        x=stats["Department"], y=stats["P50"],
+        mode="markers+text",
+        name="Median (P50)",
+        marker=dict(color=C_GREEN, size=11, symbol="circle"),
+        text=stats["P50"].round(1).astype(str),
+        textposition="bottom center",
+        textfont=dict(size=9, color=C_GREEN),
+        hovertemplate="<b>%{x}</b><br>Median: %{y:.1f} min<extra></extra>",
+    ))
     fig1.add_hline(y=8, line_dash="dash", line_color=C_YELLOW,
                    annotation_text="8-min clinical benchmark",
                    annotation_font_color=C_YELLOW)
-    fig1.update_layout(barmode="group", title="Response Time Percentiles — All Incident Types (2024 NFIRS Data)",
-                       yaxis_title="Minutes")
-    _apply_chart_style(fig1, height=520, legend_below=False)
     fig1.update_layout(
-        margin=dict(l=40, r=40, t=60, b=120),
+        title="Response Time Percentiles — All Incident Types (2024 NFIRS Data)<br>"
+              "<sup>Dots = P50 (green), P75 (orange), P90 (red)  ·  Sorted by median RT</sup>",
+        yaxis_title="Minutes",
+    )
+    _apply_chart_style(fig1, height=520, legend_below=False, title_has_subtitle=True)
+    fig1.update_layout(
+        margin=dict(l=40, r=80, t=80, b=120),
         xaxis=dict(tickangle=-40, automargin=True, tickfont=dict(size=12, color=C_TEXT)),
+        yaxis=dict(rangemode="tozero"),
     )
 
     fig2 = px.box(df, x="Department", y="RT", color="Department",
@@ -4257,23 +4330,47 @@ def update_rt(depts, tab):
             P90=lambda x: x.quantile(.90),
         ).reset_index().sort_values("P50")
 
-        fig3 = go.Figure([
-            go.Bar(x=stats_ems["Department"], y=stats_ems["P50"], name="Median (P50)",
-                   marker_color=C_GREEN,
-                   text=stats_ems["P50"].round(1), textposition="outside",
-                   texttemplate="%{text:.1f}",
-                   hovertemplate="<b>%{x}</b><br>Median: %{y:.1f} min<extra></extra>"),
-            go.Bar(x=stats_ems["Department"], y=stats_ems["P75"], name="P75",
-                   marker_color=C_ORANGE,
-                   text=stats_ems["P75"].round(1), textposition="outside",
-                   texttemplate="%{text:.1f}",
-                   hovertemplate="<b>%{x}</b><br>P75: %{y:.1f} min<extra></extra>"),
-            go.Bar(x=stats_ems["Department"], y=stats_ems["P90"], name="P90",
-                   marker_color=C_RED,
-                   text=stats_ems["P90"].round(1), textposition="outside",
-                   texttemplate="%{text:.1f}",
-                   hovertemplate="<b>%{x}</b><br>P90: %{y:.1f} min<extra></extra>"),
-        ])
+        # Dot plot (lollipop style) for EMS-only percentiles — same approach as all-incidents
+        fig3 = go.Figure()
+        for _, row in stats_ems.iterrows():
+            fig3.add_trace(go.Scatter(
+                x=[row["Department"], row["Department"]],
+                y=[0, row["P90"]],
+                mode="lines",
+                line=dict(color=C_BORDER, width=1.5),
+                showlegend=False,
+                hoverinfo="skip",
+            ))
+        fig3.add_trace(go.Scatter(
+            x=stats_ems["Department"], y=stats_ems["P90"],
+            mode="markers+text",
+            name="P90",
+            marker=dict(color=C_RED, size=11, symbol="circle"),
+            text=stats_ems["P90"].round(1).astype(str),
+            textposition="top center",
+            textfont=dict(size=9, color=C_RED),
+            hovertemplate="<b>%{x}</b><br>P90: %{y:.1f} min<extra></extra>",
+        ))
+        fig3.add_trace(go.Scatter(
+            x=stats_ems["Department"], y=stats_ems["P75"],
+            mode="markers+text",
+            name="P75",
+            marker=dict(color=C_ORANGE, size=11, symbol="circle"),
+            text=stats_ems["P75"].round(1).astype(str),
+            textposition="top center",
+            textfont=dict(size=9, color=C_ORANGE),
+            hovertemplate="<b>%{x}</b><br>P75: %{y:.1f} min<extra></extra>",
+        ))
+        fig3.add_trace(go.Scatter(
+            x=stats_ems["Department"], y=stats_ems["P50"],
+            mode="markers+text",
+            name="Median (P50)",
+            marker=dict(color=C_GREEN, size=11, symbol="circle"),
+            text=stats_ems["P50"].round(1).astype(str),
+            textposition="bottom center",
+            textfont=dict(size=9, color=C_GREEN),
+            hovertemplate="<b>%{x}</b><br>Median: %{y:.1f} min<extra></extra>",
+        ))
         # Three NFPA reference lines: BLS 4 min (green), ALS 8 min (yellow), Rural 14 min (red)
         fig3.add_hline(y=_BENCH["nfpa_1710_bls_min"], line_dash="dash",
                        line_color=C_GREEN, line_width=1.5,
@@ -4291,18 +4388,19 @@ def update_rt(depts, tab):
                        annotation_font_color=C_RED,
                        annotation_position="top right")
         fig3.update_layout(
-            barmode="group",
             title=(
                 "Response Time Percentiles \u2014 EMS Calls Only (2024 NFIRS Data)<br>"
-                "<sup>NFPA 1710 = career depts (90th pctl target); "
+                "<sup>Dots = P50 (green), P75 (orange), P90 (red)  ·  "
+                "NFPA 1710 = career depts (90th pctl target); "
                 "NFPA 1720 = volunteer depts (80th pctl target)</sup>"
             ),
             yaxis_title="Minutes",
         )
-        _apply_chart_style(fig3, height=460, legend_below=False, title_has_subtitle=True)
+        _apply_chart_style(fig3, height=480, legend_below=False, title_has_subtitle=True)
         fig3.update_layout(
-            margin=dict(l=40, r=120, t=80, b=110),
+            margin=dict(l=40, r=150, t=88, b=110),
             xaxis=dict(tickangle=-40, automargin=True, tickfont=dict(size=11, color=C_TEXT)),
+            yaxis=dict(rangemode="tozero"),
         )
 
     # ── fig4: EMS-only box plot, colored by ALS/BLS service level ─────────────
@@ -6477,7 +6575,9 @@ def _get_fig_peterson_waterfall():
 # ── NEW: Contract Timeline Gantt + Escalation Line ────────────────────────────
 @lru_cache(maxsize=1)
 def _get_fig_contract_timeline():
-    # --- Gantt chart ---
+    # --- Gantt chart using horizontal Scatter bars ---
+    # Approach: draw each contract as a thick horizontal line from Start to End
+    # using go.Scatter with mode="lines", which works cleanly with date x-axis.
     status_colors = {
         "EXPIRED":               C_RED,
         "Auto-renewed":          C_YELLOW,
@@ -6486,40 +6586,72 @@ def _get_fig_contract_timeline():
         "Expired (1-yr)":        C_RED,
     }
     ct = _CONTRACT_TIMELINE.copy()
-    ct["Duration"] = (ct["End"] - ct["Start"]).dt.days
     fig_gantt = go.Figure()
+    # Draw each contract as a thick horizontal segment
+    contracts = ct["Contract"].tolist()
+    y_pos = {c: i for i, c in enumerate(reversed(contracts))}  # reversed so top = first
     for _, row in ct.iterrows():
-        fig_gantt.add_trace(go.Bar(
-            y=[row["Contract"]], x=[row["Duration"]],
-            base=[row["Start"]],
-            orientation="h",
-            marker_color=status_colors.get(row["Status"], C_MUTED),
+        color = status_colors.get(row["Status"], C_MUTED)
+        y = y_pos[row["Contract"]]
+        start_str = row["Start"].strftime("%Y-%m-%d")
+        end_str   = row["End"].strftime("%Y-%m-%d")
+        label_str = f"{row['Start'].strftime('%b %Y')} – {row['End'].strftime('%b %Y')}"
+        fig_gantt.add_trace(go.Scatter(
+            x=[start_str, end_str],
+            y=[y, y],
+            mode="lines+markers",
+            line=dict(color=color, width=14),
+            marker=dict(size=8, color=color, symbol="line-ew"),
+            name=row["Status"],
+            legendgroup=row["Status"],
+            showlegend=False,
             hovertemplate=(
                 f"<b>{row['Contract']}</b><br>"
                 f"Status: {row['Status']}<br>"
-                f"{row['Start'].strftime('%b %Y')} - {row['End'].strftime('%b %Y')}"
-                "<extra></extra>"
+                f"{label_str}<extra></extra>"
             ),
-            showlegend=False,
         ))
-    # Add a "today" vertical line
+        # Text label at midpoint
+        mid = row["Start"] + (row["End"] - row["Start"]) / 2
+        fig_gantt.add_annotation(
+            x=mid.strftime("%Y-%m-%d"), y=y,
+            text=row["Contract"],
+            showarrow=False,
+            font=dict(size=10, color=C_TEXT),
+            xanchor="center", yanchor="middle",
+        )
+    # Legend entries
+    for status, color in status_colors.items():
+        fig_gantt.add_trace(go.Scatter(
+            x=[None], y=[None], mode="lines",
+            line=dict(color=color, width=6),
+            name=status, showlegend=True,
+        ))
+    # Add a "today" marker
+    today_str = "2026-03-09"
     fig_gantt.add_vline(
-        x=pd.Timestamp("2026-03-03"),
+        x=today_str,
         line_dash="dash",
         line_color=C_TEXT,
-        line_width=1,
-        annotation_text="Today",
-        annotation_position="top",
+        line_width=1.5,
+        annotation_text="Today (Mar 9 2026)",
+        annotation_position="top left",
+        annotation_font=dict(size=10, color=C_TEXT),
     )
     fig_gantt.update_layout(
         title="Contract Expiration Timeline"
               "<br><sup>Source: IGA contract text files  |  "
               "Red = Expired  |  Yellow = Auto-renewed  |  Green = Active</sup>",
-        xaxis=dict(type="date", title=""),
-        yaxis=dict(title="", autorange="reversed"),
-        barmode="overlay",
+        xaxis=dict(type="date", title="", tickformat="%b %Y",
+                   gridcolor=C_BORDER, zeroline=False),
+        yaxis=dict(
+            title="",
+            tickvals=list(y_pos.values()),
+            ticktext=list(y_pos.keys()),
+            showgrid=False,
+        ),
     )
-    _apply_chart_style(fig_gantt, height=420, title_has_subtitle=True)
+    _apply_chart_style(fig_gantt, height=420, title_has_subtitle=True, legend_below=True)
 
     # --- Per-capita escalation line chart ---
     fig_esc = go.Figure()

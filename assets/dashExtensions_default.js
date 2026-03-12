@@ -4,10 +4,10 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
             var dept = feature.properties.dept || feature.properties.NAME;
             var cm = context.hideout.colorMap || {};
             return {
-                fillColor: cm[dept] || '#3A3D42',
-                color: '#5C5C5C',
+                fillColor: cm[dept] || '#CBD5E1',
+                color: '#334155',
                 weight: 1.5,
-                fillOpacity: 0.45,
+                fillOpacity: 0.50,
             };
         },
         function1: function(feature) {
@@ -64,7 +64,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
             if (c) {
                 return {
                     fillColor: c,
-                    color: 'rgba(123,31,162,0.5)',
+                    color: 'rgba(71,21,110,0.65)',
                     weight: 1,
                     fillOpacity: 0.30,
                     dashArray: ''
@@ -72,7 +72,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
             }
             return {
                 fillColor: 'transparent',
-                color: 'rgba(123,31,162,0.25)',
+                color: 'rgba(71,21,110,0.30)',
                 weight: 0.5,
                 fillOpacity: 0,
                 dashArray: '4 3'
