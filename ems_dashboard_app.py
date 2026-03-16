@@ -272,10 +272,11 @@ budget = pd.DataFrame([
     {"Municipality": "Waterloo",      "FY": 2025, "Total_Expense": 1102475, "EMS_Revenue": 200000,  "Net_Tax": 557475,  "Model": "Career+Vol",    "Staff_FT": 4,  "Staff_PT": 22},
 
     # Johnson Creek: FY2025. Fire-EMS Fund 210 total. ALS (Paramedic) — 24/7 ALS ambulance confirmed.
-    # ~40 part-time + 3 FT staff including paramedics (web research, johnsoncreekfiredept.com).
+    # 3 FT (incl. chief who is paramedic), 18-20 PT EMS, 12-15 paid-on-call fire-only (~33 mid-est).
+    # 2nd ambulance staffed as-needed (nearby staff respond from home). ~750 calls/yr per chief (NFIRS shows 636).
     # EMS_Revenue = EMS runs billing ($230,500) + prior year collections ($58,000).
-    # Source: adopted-2025-budget-november-11-2024-web.pdf + johnsoncreekfiredept.com.
-    {"Municipality": "Johnson Creek", "FY": 2025, "Total_Expense": 1134154, "EMS_Revenue": 288600,  "Net_Tax": 472352,  "Model": "Volunteer",     "Staff_FT": 3,  "Staff_PT": 40},
+    # Source: adopted-2025-budget-november-11-2024-web.pdf + Chief interview Mar 13 2026.
+    {"Municipality": "Johnson Creek", "FY": 2025, "Total_Expense": 1134154, "EMS_Revenue": 288600,  "Net_Tax": 472352,  "Model": "Combination",   "Staff_FT": 3,  "Staff_PT": 33},
 
     # Palmyra: FY2025. Fire & Rescue Fund 800 (debt service excluded from Total_Expense).
     # EMS_Revenue = gross $200k minus $60k uncollectible write-off = $140k net.
@@ -619,7 +620,7 @@ STATION_COORDS = {
     "Sullivan":      (42.9640, -88.5810),
     "Waterloo":      (43.1815, -88.9904),
     "Watertown":     (43.1959, -88.7235),
-    "Western Lakes": (43.0214, -88.7756),
+    "Western Lakes": (43.0295, -88.5968),
     "Whitewater":    (42.8321, -88.7333),
 }
 dept_centroids = STATION_COORDS  # alias for any downstream references
@@ -1231,6 +1232,39 @@ def kpi_card(label, value, sub="", color=None, delta=None, delta_positive=True):
         "borderTop": f"3px solid {accent}",
     })
 
+def _legal_finding_card(title, body, status_label, color):
+    """Compact legal finding card with colored top-border and status pill."""
+    return html.Div([
+        html.Div([
+            html.Span("", style={
+                "display": "inline-block", "width": "8px", "height": "8px",
+                "borderRadius": "50%", "backgroundColor": color,
+                "marginRight": "8px", "verticalAlign": "middle",
+            }),
+            html.Span(title, style={
+                "fontWeight": "700", "fontSize": "0.85rem",
+                "color": C_TEXT, "fontFamily": FONT_STACK,
+            }),
+        ], style={"marginBottom": "8px"}),
+        html.P(body, style={
+            "fontSize": "0.8rem", "color": C_MUTED, "lineHeight": "1.6",
+            "margin": "0 0 10px 0", "fontFamily": FONT_STACK,
+        }),
+        html.Div(status_label, style={
+            "display": "inline-block", "background": color,
+            "color": "white" if color != C_YELLOW else "#1A1C1E",
+            "borderRadius": "999px", "padding": "2px 10px",
+            "fontSize": "0.65rem", "fontWeight": "700",
+            "letterSpacing": "0.05em", "textTransform": "uppercase",
+        }),
+    ], style={
+        "flex": "1", "minWidth": "200px",
+        "background": C_CARD, "borderRadius": "8px",
+        "borderTop": f"3px solid {color}",
+        "padding": "16px", "fontFamily": FONT_STACK,
+        "boxShadow": "0 1px 4px rgba(0,0,0,0.25)",
+    })
+
 SIDEBAR_STYLE = {
     "width": "230px",
     "flexShrink": "0",
@@ -1603,9 +1637,9 @@ def _get_fig_savings():
         ),
         barmode="group",
     )
-    _apply_chart_style(fig, height=500, legend_below=False, title_has_subtitle=True)
+    _apply_chart_style(fig, height=500, legend_below=True, title_has_subtitle=True)
     fig.update_layout(
-        margin=dict(l=40, r=40, t=85, b=130),
+        margin=dict(l=40, r=40, t=85, b=150),
         xaxis=dict(tickangle=-35, automargin=True, tickfont=dict(size=11, color=C_TEXT)),
     )
     # Annotation moved to bottom-center inside chart (not paper y>1 which overlaps title)
@@ -1907,6 +1941,25 @@ _CONTRACT_TIMELINE = pd.DataFrame([
 _CONTRACT_TIMELINE["Start"] = pd.to_datetime(_CONTRACT_TIMELINE["Start"])
 _CONTRACT_TIMELINE["End"]   = pd.to_datetime(_CONTRACT_TIMELINE["End"])
 
+def _get_contract_kpis():
+    """Compute summary KPI values for the Contracts & Legal tab."""
+    ct = _CONTRACT_TIMELINE
+    expired = ct["Status"].str.contains("EXPIRED|Expired", case=False).sum()
+    auto_renewed = ct["Status"].str.contains("Auto-renewed", case=False).sum()
+    active = len(ct) - expired - auto_renewed
+    latest_rates = _CONTRACT_ESCALATION.groupby("Contract")["Rate"].last()
+    return {
+        "total": str(len(ct)),
+        "expired": str(expired),
+        "active": str(active),
+        "auto_renewed": str(auto_renewed),
+        "providers": str(len(_df_contract_network)),
+        "rate_min": f"${latest_rates.min():.2f}",
+        "rate_max": f"${latest_rates.max():.2f}",
+    }
+
+_CONTRACT_KPIS = _get_contract_kpis()
+
 # ── NEW: Ambulance Replacement Priority ──────────────────────────────────────
 # Source: 2025 CIP documents, NFIRS apparatus records, 15-yr end-of-life standard
 _AMBULANCE_REPLACE_PRIORITY = pd.DataFrame([
@@ -2004,11 +2057,7 @@ _df_cc_structure = pd.DataFrame([
     {"County": "Rock",       "Population": "165,000", "Area (sq mi)": "721",   "# EMS Agencies": "Unknown",              "System Model": "Hybrid: career FDs + hospital-based EMS",       "County Coordinator": "No",  "County Levy": "No",              "ALS Coverage": "ALS urban / BLS rural",              "Data Confidence": "Estimated"},
 ])
 _CC_STRUCTURE_COND = _DT_STYLE_DATA_CONDITIONAL_BASE + [
-    {"if": {"filter_query": '{County} = "Jefferson"'}, "backgroundColor": "#3A2A1A", "fontWeight": "600", "color": C_PRIMARY},
-    {"if": {"filter_query": '{Data Confidence} = "Confirmed"', "column_id": "Data Confidence"}, "backgroundColor": "#1A3A2A", "color": "#10B981"},
-    {"if": {"filter_query": '{Data Confidence} = "Estimated"', "column_id": "Data Confidence"}, "backgroundColor": "#3A3020", "color": "#F7C143"},
-    {"if": {"filter_query": '{Data Confidence} = "Missing"',   "column_id": "Data Confidence"}, "backgroundColor": "#3A3D42", "color": "#9CA3AF"},
-    {"if": {"filter_query": '{Data Confidence} = "Mixed"',     "column_id": "Data Confidence"}, "backgroundColor": "#3A3020", "color": "#F7C143"},
+    {"if": {"filter_query": '{County} = "Jefferson"'}, "fontWeight": "600", "color": C_PRIMARY},
 ]
 
 # Panel 3B: Agencies per 10K population bar chart
@@ -2160,16 +2209,8 @@ _df_cc_governance = pd.DataFrame([
 ])
 _GOV_YES_COLS = ["EMS Coordinator", "County Levy", "Active Study", "Private EMS", "Formal RT Stds"]
 _CC_GOVERNANCE_COND = _DT_STYLE_DATA_CONDITIONAL_BASE + [
-    {"if": {"filter_query": '{County} = "Jefferson"'}, "backgroundColor": "#3A2A1A", "fontWeight": "600", "color": C_PRIMARY},
+    {"if": {"filter_query": '{County} = "Jefferson"'}, "fontWeight": "600", "color": C_PRIMARY},
 ]
-for _gcol in _GOV_YES_COLS:
-    _CC_GOVERNANCE_COND += [
-        {"if": {"filter_query": f'{{{_gcol}}} contains "Yes"',      "column_id": _gcol}, "backgroundColor": "#1A3A2A", "color": "#10B981"},
-        {"if": {"filter_query": f'{{{_gcol}}} = "No"',              "column_id": _gcol}, "backgroundColor": "#3A1A1A", "color": "#EF4444"},
-        {"if": {"filter_query": f'{{{_gcol}}} contains "Unknown"',  "column_id": _gcol}, "backgroundColor": "#3A3020", "color": "#F7C143"},
-        {"if": {"filter_query": f'{{{_gcol}}} contains "Partial"',  "column_id": _gcol}, "backgroundColor": "#3A3020", "color": "#F7C143"},
-        {"if": {"filter_query": f'{{{_gcol}}} contains "Emerging"', "column_id": _gcol}, "backgroundColor": "#3A3020", "color": "#F7C143"},
-    ]
 
 # ── Cross-County Asset Comparison (Section 19b) ─────────────────────────────
 # Jefferson ambulance total from MABAS data; peer county figures from secondary
@@ -2241,8 +2282,8 @@ def _get_fig_cc_assets():
         title=f"Jefferson County Fleet Composition ({_JEFF_TOTAL_APPARATUS} Total Units)<br>"
               f"<sup>All apparatus across 14 departments — MABAS Division 118</sup>",
     )
-    _apply_chart_style(fig_comp, height=380, title_has_subtitle=True)
-    fig_comp.update_layout(margin=dict(l=20, r=20, t=70, b=20))
+    _apply_chart_style(fig_comp, height=380, legend_below=True, title_has_subtitle=True)
+    fig_comp.update_layout(margin=dict(l=20, r=20, t=70, b=60))
 
     # ── KPI summary data ────────────────────────────────────────────────────
     jeff_amb_per_10k = _JEFF_TOTAL_AMBULANCES / 84700 * 10000
@@ -2556,9 +2597,7 @@ def render_tab(tab):
                     sort_action="native", filter_action="native",
                     style_table={"overflowX": "auto", "borderRadius": "8px", "overflow": "hidden"},
                     style_header=_DT_STYLE_HEADER, style_cell=_DT_STYLE_CELL,
-                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE + [
-                        {"if": {"filter_query": "{Median Response Time (min)} > 8"},
-                         "backgroundColor": "#3A1A1A", "color": C_RED}],
+                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE,
                     page_size=20),
                 _source_citation(
                     "2024 NFIRS — 14 department Excel files (ISyE Project/Data and Resources/Call Data/)",
@@ -2700,22 +2739,12 @@ def render_tab(tab):
                     data=_bf[5],
                     style_table={"overflowX": "auto", "marginTop": "-8px",
                                  "marginBottom": "24px"},
-                    style_header={
-                        "backgroundColor": "#2A2D31", "color": "#E0E0E0",
-                        "fontWeight": "bold", "border": "1px solid #444",
-                        "textAlign": "left", "padding": "8px 12px",
-                    },
-                    style_cell={
-                        "backgroundColor": "#1E2024", "color": "#CCCCCC",
-                        "border": "1px solid #333", "textAlign": "left",
-                        "padding": "8px 12px", "fontSize": "13px",
-                        "whiteSpace": "normal", "height": "auto",
-                        "fontFamily": "Segoe UI, Roboto, sans-serif",
-                    },
-                    style_data_conditional=[
+                    style_header=_DT_STYLE_HEADER,
+                    style_cell={**_DT_STYLE_CELL, "whiteSpace": "normal", "height": "auto"},
+                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE,
+                    style_cell_conditional=[
                         {"if": {"column_id": "Gap Amount"},
-                         "fontWeight": "bold", "color": C_YELLOW,
-                         "textAlign": "right", "width": "120px"},
+                         "fontWeight": "bold", "textAlign": "right", "width": "120px"},
                         {"if": {"column_id": "Department"},
                          "width": "130px"},
                     ],
@@ -2782,11 +2811,7 @@ def render_tab(tab):
                     style_cell={**_DT_STYLE_CELL, "fontSize": "12px",
                                 "whiteSpace": "normal", "height": "auto",
                                 "maxWidth": "280px"},
-                    style_data_conditional=[
-                        {"if": {"row_index": "odd"}, "backgroundColor": "#1E293B"},
-                        {"if": {"filter_query": "{Expires} contains 'EXPIRED'"},
-                         "backgroundColor": "#3A1A1A", "color": C_RED},
-                    ],
+                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE,
                 ),
                 html.Div([
                     html.Span("Data Gaps (research TODO): ", style={
@@ -2874,10 +2899,7 @@ def render_tab(tab):
                             style_header={**_DT_STYLE_HEADER, "backgroundColor": C_RED},
                             style_cell={**_DT_STYLE_CELL, "fontSize": "12px",
                                         "whiteSpace": "normal", "height": "auto"},
-                            style_data_conditional=[
-                                {"if": {"row_index": "odd"}, "backgroundColor": "#2E2020"},
-                                {"if": {"filter_query": "{# Flags} >= 3"},
-                                 "backgroundColor": "#3A1A1A", "fontWeight": "600"}]),
+                            style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE),
                     ], style={"flex": "1.2"}),
                     html.Div([
                         html.Div("How to Read This Table", style={
@@ -2966,11 +2988,7 @@ def render_tab(tab):
                     style_cell_conditional=[
                         {"if": {"column_id": "Municipality"}, "textAlign": "left", "fontWeight": "600"},
                     ],
-                    style_data_conditional=[
-                        {"if": {"row_index": "odd"}, "backgroundColor": "#2E3238"},
-                        {"if": {"filter_query": "{Ambulances} = 0"},
-                         "color": C_MUTED, "fontStyle": "italic"},
-                    ],
+                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE,
                 ),
                 _sub_header("Ambulance Replacement Priority — Units Past End-of-Life"),
                 dash_table.DataTable(
@@ -2981,13 +2999,7 @@ def render_tab(tab):
                                  "overflow": "hidden", "marginBottom": "20px"},
                     style_header=_DT_STYLE_HEADER,
                     style_cell={**_DT_STYLE_CELL, "whiteSpace": "normal", "height": "auto"},
-                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE + [
-                        {"if": {"filter_query": '{Risk} eq "CRITICAL"'},
-                         "backgroundColor": "#3A1A1A", "color": "#EF4444"},
-                        {"if": {"filter_query": '{Risk} eq "HIGH"'},
-                         "backgroundColor": "#3A3020", "color": "#F7C143"},
-                        {"if": {"filter_query": '{Risk} eq "MONITOR"'},
-                         "backgroundColor": "#2E2A1E", "color": C_PRIMARY}]),
+                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE),
                 _source_citation(
                     "MABAS_Assets/*.xlsx — 14 MABAS Division 118 FD Resource Lists (apparatus inventories)",
                     "2024 NFIRS call data (EMS call volumes for utilization metrics)",
@@ -3073,11 +3085,7 @@ def render_tab(tab):
                     style_table={"overflowX": "auto", "borderRadius": "8px",
                                  "overflow": "hidden", "marginBottom": "14px"},
                     style_header=_DT_STYLE_HEADER, style_cell=_DT_STYLE_CELL,
-                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE + [
-                        {"if": {"filter_query": '{Metric} = "Scaled Estimate for Jefferson"'},
-                         "backgroundColor": "#3A2A1A", "fontWeight": "600", "color": C_PRIMARY},
-                        {"if": {"filter_query": '{Metric} = "Levy Exception Used"'},
-                         "backgroundColor": "#2E2A1E"}],
+                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE,
                     style_cell_conditional=[
                         {"if": {"column_id": "Metric"}, "fontWeight": "600", "width": "28%", "minWidth": "180px"},
                         {"if": {"column_id": "Jefferson County"}, "width": "36%"},
@@ -3295,12 +3303,7 @@ def render_tab(tab):
                         {"if": {"column_id": "Status"}, "textAlign": "center", "width": "80px"},
                     ],
                     style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE + [
-                        {"if": {"filter_query": '{County} = "Jefferson"'},
-                         "backgroundColor": "#3A2A1A", "fontWeight": "600", "color": C_PRIMARY},
-                        {"if": {"filter_query": '{Status} = "Confirmed"', "column_id": "Status"},
-                         "backgroundColor": "#1A3A2A", "color": "#10B981"},
-                        {"if": {"filter_query": '{Status} = "Missing"', "column_id": "Status"},
-                         "backgroundColor": "#3A3D42", "color": "#9CA3AF"},
+                        {"if": {"filter_query": '{County} = "Jefferson"'}, "fontWeight": "600", "color": C_PRIMARY},
                     ],
                 ),
                 html.P(
@@ -3318,102 +3321,172 @@ def render_tab(tab):
         ])
 
     elif tab == "tab-contracts":
+        _ck = _CONTRACT_KPIS
+        _ct_figs = _get_fig_contract_timeline()
         return html.Div([
+            # ── CARD 1: KPI Overview ──────────────────────────────────────
             html.Div([
-                _section_header("EMS Contract Network Analysis"),
-                html.P("17 active/expired IGAs across 7 provider networks. See contract_analysis.md.",
-                    style={"fontSize": "0.8rem", "color": C_TEXT, "lineHeight": "1.6",
-                           "background": "#2E2A1E", "border": f"1px solid {C_PRIMARY}",
-                           "borderLeft": f"4px solid {C_PRIMARY}", "borderRadius": "6px",
-                           "padding": "10px 14px", "marginBottom": "20px", "fontFamily": FONT_STACK}),
-                _sub_header("16a  —  Contract Network Summary"),
-                dash_table.DataTable(
-                    id="sec16a-contract-table",
-                    columns=[{"name": c, "id": c} for c in _df_contract_network.columns],
-                    data=_df_contract_network.to_dict("records"),
-                    style_table={"overflowX": "auto", "borderRadius": "8px",
-                                 "overflow": "hidden", "marginBottom": "20px"},
-                    style_header=_DT_STYLE_HEADER,
-                    style_cell={**_DT_STYLE_CELL, "whiteSpace": "normal", "height": "auto"},
-                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE + [
-                        {"if": {"filter_query": '{Status} contains "EXPIRED"'},
-                         "backgroundColor": "#3A1A1A", "color": "#EF4444"},
-                        {"if": {"filter_query": '{Status} contains "Auto-renewing"'},
-                         "backgroundColor": "#3A3020", "color": "#F7C143"},
-                        {"if": {"filter_query": '{Status} contains "Active"'},
-                         "backgroundColor": "#1A3A2A", "color": "#10B981"}]),
-                _sub_header("16b  —  Self-Operated vs. Contracted"),
-                dash_table.DataTable(
-                    id="sec16b-self-contract-table",
-                    columns=[{"name": c, "id": c} for c in _df_self_vs_contract.columns],
-                    data=_df_self_vs_contract.to_dict("records"),
-                    style_table={"overflowX": "auto", "borderRadius": "8px",
-                                 "overflow": "hidden", "marginBottom": "20px"},
-                    style_header=_DT_STYLE_HEADER,
-                    style_cell={**_DT_STYLE_CELL, "whiteSpace": "normal", "height": "auto"},
-                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE),
-                _sub_header("16c  —  Key Contractual Barriers"),
+                _section_header("EMS Contract & Legal Landscape"),
                 html.Div([
-                    html.Div("Jefferson City Exclusivity Clause", style={
-                        "fontWeight": "700", "marginBottom": "6px", "fontSize": "0.85rem",
-                        "color": C_RED, "fontFamily": FONT_STACK}),
-                    html.P("Section 1(b) prohibits transitions before Jan 1, 2028 without penalty.",
-                        style={"fontSize": "0.8rem", "color": C_TEXT, "lineHeight": "1.6",
-                               "margin": "0", "fontFamily": FONT_STACK}),
-                ], style={"background": "#2E1A1A", "border": f"1px solid {C_BORDER}",
-                          "borderLeft": f"4px solid {C_RED}", "borderRadius": "6px",
-                          "padding": "12px 14px", "marginBottom": "14px"}),
+                    kpi_card("Provider Networks", _ck["providers"],
+                             "independent EMS providers", C_PRIMARY),
+                    kpi_card("Active Contracts", _ck["active"],
+                             "inter-governmental agreements", C_GREEN),
+                    kpi_card("Expired", _ck["expired"],
+                             "as of Mar 2026", C_RED),
+                    kpi_card("Auto-Renewed", _ck["auto_renewed"],
+                             "120-day opt-out windows", C_YELLOW),
+                    kpi_card("Per-Capita Range",
+                             f"{_ck['rate_min']} – {_ck['rate_max']}",
+                             "latest contract rates", C_PRIMARY),
+                ], style={"display": "flex", "gap": "12px",
+                          "flexWrap": "wrap", "marginBottom": "16px"}),
+                _source_citation(
+                    "contract_analysis.md — all 17 IGAs reviewed",
+                    "EMS Working Group meeting records",
+                ),
+            ], style=CARD),
+
+            # ── CARD 2: Key Legal Findings ────────────────────────────────
+            html.Div([
+                _section_header("Key Legal & Contractual Findings"),
                 html.Div([
-                    html.Div("Fort Atkinson County-Wide System Clause — Primary Legal Entry Point", style={
-                        "fontWeight": "700", "marginBottom": "6px", "fontSize": "0.85rem",
-                        "color": C_GREEN, "fontFamily": FONT_STACK}),
-                    html.P("Section 6: reopens if county adopts county-wide EMS. Contracts expired Dec 2025.",
-                        style={"fontSize": "0.8rem", "color": C_TEXT, "lineHeight": "1.6",
-                               "margin": "0", "fontFamily": FONT_STACK}),
-                ], style={"background": "#1A2E1A", "border": f"1px solid {C_BORDER}",
-                          "borderLeft": f"4px solid {C_GREEN}", "borderRadius": "6px",
-                          "padding": "12px 14px", "marginBottom": "14px"}),
-                html.Div([
-                    html.Div("No Performance Standards in Any Contract", style={
-                        "fontWeight": "700", "marginBottom": "6px", "fontSize": "0.85rem",
-                        "color": C_YELLOW, "fontFamily": FONT_STACK}),
-                    html.P("All 17 contracts are subsidy-only. Favorable for hybrid transition.",
-                        style={"fontSize": "0.8rem", "color": C_TEXT, "lineHeight": "1.6",
-                               "margin": "0", "fontFamily": FONT_STACK}),
-                ], style={"background": "#2E2A1E", "border": f"1px solid {C_BORDER}",
-                          "borderLeft": f"4px solid {C_YELLOW}", "borderRadius": "6px",
-                          "padding": "12px 14px", "marginBottom": "4px"}),
+                    _legal_finding_card(
+                        "Jefferson City Exclusivity Clause",
+                        "Section 1(b) prohibits transitions before Jan 1, 2028 "
+                        "without penalty. Locks 5 townships into current provider.",
+                        "Blocking", C_RED),
+                    _legal_finding_card(
+                        "Fort Atkinson County-Wide Clause",
+                        "Section 6: contracts reopen if county adopts county-wide "
+                        "EMS. Both FA contracts expired Dec 2025 — primary legal "
+                        "entry point for restructuring.",
+                        "Opportunity", C_GREEN),
+                    _legal_finding_card(
+                        "No Performance Standards",
+                        "All 17 contracts are subsidy-only — no response time, "
+                        "coverage, or staffing requirements. Favorable for "
+                        "incremental transition.",
+                        "Systemic", C_YELLOW),
+                ], style={"display": "flex", "gap": "14px",
+                          "flexWrap": "wrap", "marginBottom": "16px"}),
                 _source_citation(
                     "contract_analysis.md — all 17 IGAs reviewed",
                     "EMS Working Group meeting records (contract status updates)",
                 ),
             ], style=CARD),
+
+            # ── CARD 3: Timeline & Rate Escalation ────────────────────────
             html.Div([
-                _section_header("EMS Levy Framework & Implementation"),
-                html.P("Two independent statutory pathways for EMS levy relief.",
+                _section_header("Contract Windows & Rate Escalation"),
+                dcc.Graph(id="contract-gantt", figure=_ct_figs[0],
+                    style={"marginBottom": "20px"}),
+                dcc.Graph(id="contract-escalation", figure=_ct_figs[1]),
+                _source_citation(
+                    "Jefferson City EMS contract 2024-2027 (Aztalan template)",
+                    "Waterloo fire and EMS contract (Town of Milford)",
+                    "FA Ambulance contract 2023 (Koshkonong & Jefferson Twp)",
+                    "Lake Mills / Ryan Brothers IGAs (Aztalan, Oakland, Lake Mills Town)",
+                ),
+            ], style=CARD),
+
+            # ── CARD 4: Levy Framework & Eligibility ──────────────────────
+            html.Div([
+                _section_header("EMS Levy Framework & Eligibility"),
+                html.P("Two independent statutory pathways exist for EMS levy "
+                       "relief outside the normal levy limit. Jefferson County "
+                       "qualifies for both.",
                     style={"fontSize": "0.8rem", "color": C_TEXT, "lineHeight": "1.6",
                            "background": "#2E2A1E", "border": f"1px solid {C_PRIMARY}",
                            "borderLeft": f"4px solid {C_PRIMARY}", "borderRadius": "6px",
-                           "padding": "10px 14px", "marginBottom": "20px", "fontFamily": FONT_STACK}),
+                           "padding": "10px 14px", "marginBottom": "16px",
+                           "fontFamily": FONT_STACK}),
+                html.Div([
+                    kpi_card("County Levy Path", "66.0602(3)(e)6",
+                             "Lafayette Co. precedent", C_GREEN),
+                    kpi_card("Regional Exemption", "AB 197",
+                             "570 sq mi, 12+ munis (qualifies)", C_GREEN),
+                ], style={"display": "flex", "gap": "12px",
+                          "flexWrap": "wrap", "marginBottom": "16px"}),
+                _sub_header("Municipality-Level Levy Eligibility"),
+                dash_table.DataTable(
+                    id="sec16-levy-elig-table",
+                    columns=[{"name": c, "id": c} for c in _df_levy_elig.columns],
+                    data=_df_levy_elig.to_dict("records"),
+                    style_table={"overflowX": "auto", "borderRadius": "8px",
+                                 "overflow": "hidden", "marginBottom": "16px"},
+                    style_header=_DT_STYLE_HEADER,
+                    style_cell={**_DT_STYLE_CELL, "whiteSpace": "normal",
+                                "height": "auto"},
+                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE + [
+                        {"if": {"filter_query": '{Status} contains "Eligible"',
+                                "column_id": "Status"},
+                         "color": C_GREEN, "fontWeight": "600"},
+                        {"if": {"filter_query": '{Status} contains "Locked"',
+                                "column_id": "Status"},
+                         "color": C_RED, "fontWeight": "600"},
+                        {"if": {"filter_query": '{Status} contains "Ineligible"',
+                                "column_id": "Status"},
+                         "color": C_YELLOW, "fontWeight": "600"},
+                    ]),
                 _source_citation(
                     "savings_model.md — Section 1 (levy framework analysis)",
                     "Lafayette County Resolution 26-23 (precedent)",
                     "Wis. Stat. 66.0602(3) + 66.0301 (statutory authority)",
                 ),
             ], style=CARD),
+
+            # ── CARD 5: Contract Network Detail ───────────────────────────
             html.Div([
-                _section_header("Contract Windows & Rate Escalation"),
-                _sub_header("Contract Expiration Timeline"),
-                dcc.Graph(id="contract-gantt", figure=_get_fig_contract_timeline()[0],
-                    style={"marginBottom": "20px"}),
-                _sub_header("Per-Capita Rate Escalation by Contract"),
-                dcc.Graph(id="contract-escalation", figure=_get_fig_contract_timeline()[1],
-                    style={"marginBottom": "20px"}),
+                _section_header("Contract Network Detail"),
+                _sub_header("Provider Network Summary"),
+                dash_table.DataTable(
+                    id="sec16a-contract-table",
+                    columns=[{"name": c, "id": c}
+                             for c in _df_contract_network.columns],
+                    data=_df_contract_network.to_dict("records"),
+                    sort_action="native",
+                    style_table={"overflowX": "auto", "borderRadius": "8px",
+                                 "overflow": "hidden", "marginBottom": "20px"},
+                    style_header=_DT_STYLE_HEADER,
+                    style_cell={**_DT_STYLE_CELL, "whiteSpace": "normal",
+                                "height": "auto"},
+                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE + [
+                        {"if": {"filter_query": '{Status} contains "EXPIRED"',
+                                "column_id": "Status"},
+                         "color": C_RED, "fontWeight": "600"},
+                        {"if": {"filter_query": '{Status} contains "Active"',
+                                "column_id": "Status"},
+                         "color": C_GREEN, "fontWeight": "600"},
+                        {"if": {"filter_query": '{Status} contains "auto-renew"',
+                                "column_id": "Status"},
+                         "color": C_YELLOW, "fontWeight": "600"},
+                    ]),
+                _sub_header("Operating Model by Municipality"),
+                dash_table.DataTable(
+                    id="sec16b-self-contract-table",
+                    columns=[{"name": c, "id": c}
+                             for c in _df_self_vs_contract.columns],
+                    data=_df_self_vs_contract.to_dict("records"),
+                    sort_action="native",
+                    style_table={"overflowX": "auto", "borderRadius": "8px",
+                                 "overflow": "hidden", "marginBottom": "16px"},
+                    style_header=_DT_STYLE_HEADER,
+                    style_cell={**_DT_STYLE_CELL, "whiteSpace": "normal",
+                                "height": "auto"},
+                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE + [
+                        {"if": {"filter_query": '{EMS Model} contains "Collapsed"',
+                                "column_id": "EMS Model"},
+                         "color": C_RED, "fontWeight": "600"},
+                        {"if": {"filter_query": '{Self-Operated} contains "Formerly"',
+                                "column_id": "Self-Operated"},
+                         "color": C_YELLOW, "fontWeight": "600"},
+                        {"if": {"filter_query": '{Self-Operated} contains "Partial"',
+                                "column_id": "Self-Operated"},
+                         "color": C_YELLOW, "fontWeight": "600"},
+                    ]),
                 _source_citation(
-                    "Jefferson City EMS contract 2024-2027 (Aztalan template)",
-                    "Waterloo fire and EMS contract (Town of Milford)",
-                    "FA Ambulance contract 2023 (Koshkonong & Jefferson Twp)",
-                    "Lake Mills / Ryan Brothers IGAs (Aztalan, Oakland, Lake Mills Town)",
+                    "contract_analysis.md — all 17 IGAs reviewed",
                 ),
             ], style=CARD),
         ])
@@ -3444,15 +3517,7 @@ def render_tab(tab):
                                  "overflow": "hidden", "marginBottom": "16px"},
                     style_header=_DT_STYLE_HEADER,
                     style_cell={**_DT_STYLE_CELL, "whiteSpace": "normal", "height": "auto"},
-                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE + [
-                        {"if": {"filter_query": '{Status} contains "Eligible"'},
-                         "backgroundColor": "#1A3A2A", "color": "#10B981"},
-                        {"if": {"filter_query": '{Status} contains "Ready"'},
-                         "backgroundColor": "#1A3A2A", "color": "#10B981"},
-                        {"if": {"filter_query": '{Status} contains "Locked"'},
-                         "backgroundColor": "#3A3020", "color": "#F7C143"},
-                        {"if": {"filter_query": '{Status} contains "Ineligible"'},
-                         "backgroundColor": "#3A1A1A", "color": "#EF4444"}]),
+                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE),
                 html.P("Conservative estimate (excl. Jefferson): ~$1.02M in annual costs attributable to "
                     "identified structural inefficiencies — approximately 7.5% of the county's $13.6M total EMS budget.",
                     style={"fontSize": "0.8rem", "color": C_TEXT, "lineHeight": "1.6",
@@ -3505,13 +3570,7 @@ def render_tab(tab):
                                  "overflow": "hidden", "marginBottom": "20px"},
                     style_header=_DT_STYLE_HEADER,
                     style_cell={**_DT_STYLE_CELL, "whiteSpace": "normal", "height": "auto"},
-                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE + [
-                        {"if": {"filter_query": '{Window} eq "Near-term"'},
-                         "backgroundColor": "#1A3A2A", "color": "#10B981"},
-                        {"if": {"filter_query": '{Window} eq "Medium-term"'},
-                         "backgroundColor": "#3A2A1A", "color": C_PRIMARY},
-                        {"if": {"filter_query": '{Window} eq "Long-term"'},
-                         "backgroundColor": "#3A3020", "color": "#F7C143"}]),
+                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE),
                 _source_citation(
                     "contract_analysis.md — Sections B-D (contract structure analysis)",
                     "savings_model.md (implementation phases & contract windows)",
@@ -4086,9 +4145,9 @@ def update_vol(depts, tab):
               "Western Lakes bar capped — true value ~2,212/1K (full Waukesha Co. district)</sup>",
         yaxis_title="",
     )
-    _apply_chart_style(fig3, height=560, legend_below=False, title_has_subtitle=True)
+    _apply_chart_style(fig3, height=560, legend_below=True, title_has_subtitle=True)
     fig3.update_layout(
-        margin=dict(l=145, r=200, t=88, b=30),
+        margin=dict(l=145, r=200, t=88, b=60),
         xaxis=dict(
             title="Calls per 1,000 Population",
             gridcolor=C_BORDER, showline=False, zeroline=False,
@@ -4277,9 +4336,9 @@ def update_rt(depts, tab):
               "<sup>Dots = P50 (green), P75 (orange), P90 (red)  ·  Sorted by median RT</sup>",
         yaxis_title="Minutes",
     )
-    _apply_chart_style(fig1, height=520, legend_below=False, title_has_subtitle=True)
+    _apply_chart_style(fig1, height=520, legend_below=True, title_has_subtitle=True)
     fig1.update_layout(
-        margin=dict(l=40, r=80, t=80, b=120),
+        margin=dict(l=40, r=80, t=80, b=140),
         xaxis=dict(tickangle=-40, automargin=True, tickfont=dict(size=12, color=C_TEXT)),
         yaxis=dict(rangemode="tozero"),
     )
@@ -4396,9 +4455,9 @@ def update_rt(depts, tab):
             ),
             yaxis_title="Minutes",
         )
-        _apply_chart_style(fig3, height=480, legend_below=False, title_has_subtitle=True)
+        _apply_chart_style(fig3, height=480, legend_below=True, title_has_subtitle=True)
         fig3.update_layout(
-            margin=dict(l=40, r=150, t=88, b=110),
+            margin=dict(l=40, r=150, t=88, b=130),
             xaxis=dict(tickangle=-40, automargin=True, tickfont=dict(size=11, color=C_TEXT)),
             yaxis=dict(rangemode="tozero"),
         )
@@ -4842,8 +4901,8 @@ def _get_portage_figs():
         title="Portage 2024 Payor Mix: % of Calls vs % of Revenue<br>"
               "<sup>Private Pay = high % of calls but low % of revenue</sup>",
     )
-    _apply_chart_style(fig_p, height=400, legend_below=False, title_has_subtitle=True)
-    fig_p.update_layout(margin=dict(l=50, r=40, t=80, b=60))
+    _apply_chart_style(fig_p, height=400, legend_below=True, title_has_subtitle=True)
+    fig_p.update_layout(margin=dict(l=50, r=40, t=80, b=80))
     return fig_v, fig_r, fig_p
 
 
@@ -5016,8 +5075,8 @@ def _get_budget_figs():
               "Right: green = fully funded, red = funding gap · "
               "Edgerton revenue/tax N/A</sup>",
     )
-    _apply_chart_style(fig_b, height=700, legend_below=False, title_has_subtitle=True)
-    fig_b.update_layout(margin=dict(l=5, r=5, t=88, b=20))
+    _apply_chart_style(fig_b, height=700, legend_below=True, title_has_subtitle=True)
+    fig_b.update_layout(margin=dict(l=5, r=5, t=88, b=50))
 
     # ── Billing rates chart: Jefferson Co. confirmed (solid) + WI peer benchmarks (faded) ────────
     # Design decisions:
@@ -5433,9 +5492,9 @@ def _get_budget_figs():
               "hover for details</sup>",
         xaxis_title="Unfunded Amount ($)",
     )
-    _apply_chart_style(fig_gap, height=420, legend_below=False, title_has_subtitle=True)
+    _apply_chart_style(fig_gap, height=420, legend_below=True, title_has_subtitle=True)
     fig_gap.update_layout(
-        margin=dict(l=120, r=80, t=88, b=40),
+        margin=dict(l=120, r=80, t=88, b=60),
         xaxis=dict(tickprefix="$", tickformat=",.0f"),
     )
 
@@ -6566,8 +6625,8 @@ def _get_fig_peterson_waterfall():
         yaxis_tickprefix="$",
         yaxis_separatethousands=True,
     )
-    _apply_chart_style(fig, height=520, title_has_subtitle=True)
-    fig.update_layout(margin=dict(l=60, r=40, t=85, b=120),
+    _apply_chart_style(fig, height=520, legend_below=True, title_has_subtitle=True)
+    fig.update_layout(margin=dict(l=60, r=40, t=85, b=140),
                       xaxis=dict(tickangle=-35))
     return fig
 
@@ -6575,9 +6634,6 @@ def _get_fig_peterson_waterfall():
 # ── NEW: Contract Timeline Gantt + Escalation Line ────────────────────────────
 @lru_cache(maxsize=1)
 def _get_fig_contract_timeline():
-    # --- Gantt chart using horizontal Scatter bars ---
-    # Approach: draw each contract as a thick horizontal line from Start to End
-    # using go.Scatter with mode="lines", which works cleanly with date x-axis.
     status_colors = {
         "EXPIRED":               C_RED,
         "Auto-renewed":          C_YELLOW,
@@ -6586,72 +6642,36 @@ def _get_fig_contract_timeline():
         "Expired (1-yr)":        C_RED,
     }
     ct = _CONTRACT_TIMELINE.copy()
-    fig_gantt = go.Figure()
-    # Draw each contract as a thick horizontal segment
-    contracts = ct["Contract"].tolist()
-    y_pos = {c: i for i, c in enumerate(reversed(contracts))}  # reversed so top = first
-    for _, row in ct.iterrows():
-        color = status_colors.get(row["Status"], C_MUTED)
-        y = y_pos[row["Contract"]]
-        start_str = row["Start"].strftime("%Y-%m-%d")
-        end_str   = row["End"].strftime("%Y-%m-%d")
-        label_str = f"{row['Start'].strftime('%b %Y')} – {row['End'].strftime('%b %Y')}"
-        fig_gantt.add_trace(go.Scatter(
-            x=[start_str, end_str],
-            y=[y, y],
-            mode="lines+markers",
-            line=dict(color=color, width=14),
-            marker=dict(size=8, color=color, symbol="line-ew"),
-            name=row["Status"],
-            legendgroup=row["Status"],
-            showlegend=False,
-            hovertemplate=(
-                f"<b>{row['Contract']}</b><br>"
-                f"Status: {row['Status']}<br>"
-                f"{label_str}<extra></extra>"
-            ),
-        ))
-        # Text label at midpoint
-        mid = row["Start"] + (row["End"] - row["Start"]) / 2
-        fig_gantt.add_annotation(
-            x=mid.strftime("%Y-%m-%d"), y=y,
-            text=row["Contract"],
-            showarrow=False,
-            font=dict(size=10, color=C_TEXT),
-            xanchor="center", yanchor="middle",
-        )
-    # Legend entries
-    for status, color in status_colors.items():
-        fig_gantt.add_trace(go.Scatter(
-            x=[None], y=[None], mode="lines",
-            line=dict(color=color, width=6),
-            name=status, showlegend=True,
-        ))
-    # Add a "today" marker
-    today_str = "2026-03-09"
-    fig_gantt.add_vline(
-        x=today_str,
-        line_dash="dash",
-        line_color=C_TEXT,
-        line_width=1.5,
-        annotation_text="Today (Mar 9 2026)",
-        annotation_position="top left",
-        annotation_font=dict(size=10, color=C_TEXT),
+    # Sort: expired at bottom, active at top
+    _so = {"Active": 0, "Active (rolling 3-yr)": 0,
+           "Auto-renewed": 1, "EXPIRED": 2, "Expired (1-yr)": 2}
+    ct["_order"] = ct["Status"].map(_so).fillna(1)
+    ct = ct.sort_values(["_order", "End"], ascending=[False, True])
+
+    fig_gantt = px.timeline(
+        ct, x_start="Start", x_end="End", y="Contract", color="Status",
+        color_discrete_map=status_colors,
+    )
+    fig_gantt.update_traces(marker_line_width=0, opacity=0.9)
+    fig_gantt.update_yaxes(autorange="reversed", title="", showgrid=False)
+
+    # "Today" marker
+    today_dt = pd.Timestamp("2026-03-16")
+    fig_gantt.add_shape(
+        type="line", x0=today_dt, x1=today_dt, y0=0, y1=1,
+        yref="paper", line=dict(dash="dot", color=C_TEXT, width=1.5),
+    )
+    fig_gantt.add_annotation(
+        x=today_dt, y=1.02, yref="paper",
+        text="Today", showarrow=False,
+        font=dict(size=10, color=C_TEXT), xanchor="left",
     )
     fig_gantt.update_layout(
         title="Contract Expiration Timeline"
-              "<br><sup>Source: IGA contract text files  |  "
-              "Red = Expired  |  Yellow = Auto-renewed  |  Green = Active</sup>",
-        xaxis=dict(type="date", title="", tickformat="%b %Y",
-                   gridcolor=C_BORDER, zeroline=False),
-        yaxis=dict(
-            title="",
-            tickvals=list(y_pos.values()),
-            ticktext=list(y_pos.keys()),
-            showgrid=False,
-        ),
+              "<br><sup>Source: IGA contract text files</sup>",
+        xaxis=dict(title="", tickformat="%b %Y"),
     )
-    _apply_chart_style(fig_gantt, height=420, title_has_subtitle=True, legend_below=True)
+    _apply_chart_style(fig_gantt, height=380, title_has_subtitle=True, legend_below=True)
 
     # --- Per-capita escalation line chart ---
     fig_esc = go.Figure()
