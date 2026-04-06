@@ -189,12 +189,103 @@ def _extrapolate_annual(counts_series, dept_series):
         result.loc[mask] = (counts_series.loc[mask] / months * 12).round(0)
     return result
 
+# ── Authoritative 2024 EMS Call Volumes (user-provided ground truth) ─────────
+# These override any counts derived from NFIRS files. Source document pending.
+# Lake Mills* asterisk = caveat TBD.
+AUTH_EMS_CALLS = {
+    "Cambridge":      87,
+    "Fort Atkinson":  1616,
+    "Ixonia":         289,
+    "Jefferson":      1457,
+    "Johnson Creek":  487,
+    "Lake Mills":     518,
+    "Palmyra":        32,
+    "Waterloo":       520,
+    "Watertown":      2012,
+    "Whitewater":     64,    # Jefferson County contracts only
+    "Edgerton":       2138,
+    "Western Lakes":  5633,
+}
+_AUTH_COUNTY_TOTAL = sum(AUTH_EMS_CALLS.values())  # 14,853
+
+# ── Call volume discrepancy notes (Looker Studio vs AUTH_EMS_CALLS) ──────────
+# Where Looker Studio PDF data differs from our authoritative counts, document why.
+# These trigger asterisks (*) on call volume displays so readers know about the gap.
+CALL_VOLUME_NOTES = {
+    "Cambridge":     "Looker Studio reports 197 total incidents (all types); 87 = EMS-only",
+    "Ixonia":        "Looker Studio reports 248 (NFIRS); 289 from Chief Association data",
+    "Johnson Creek": "Looker Studio reports 1,090 total incidents (all types); 487 = EMS-only",
+    "Waterloo":      "Looker Studio reports 417 (NFIRS); 520 from Chief Association data",
+}
+
+# ── Data quality notes (known issues in external sources) ───────────────────
+DATA_QUALITY_NOTES = {
+    "Edgerton": "Looker Studio PDF address table shows Fort Atkinson addresses "
+                "(430 Wilcox St, 525 Memorial Dr) — likely a data join error in the "
+                "Looker report. City breakdown correctly shows Milton/Edgerton.",
+}
+
+# ── High-frequency call addresses (from Looker Studio PDFs, 2024) ───────────
+# Top-volume addresses that may indicate nursing facilities, hospitals, or
+# institutional callers worth investigating for community paramedicine outreach.
+HIGH_FREQ_ADDRESSES = {
+    # Format: (address, calls, note, lat, lon)  — lat/lon geocoded via Nominatim.
+    # Minimum 5 calls per address. Edgerton excluded (Looker data join error).
+    "Fort Atkinson": [
+        ("430 Wilcox St",       184, "Care facility",  42.93370, -88.82998),
+        ("525 Memorial Dr",      76, "",                42.93428, -88.82443),
+        ("737 Reena Ave",        73, "",                42.94041, -88.86390),
+        ("1 W Milwaukee Ave",    46, "",                42.92677, -88.83717),
+        ("915 S Main St",        28, "",                42.91656, -88.83684),
+        ("217 S Water St E",     23, "",                42.92750, -88.83360),
+        ("1055 East St",         21, "",                42.91479, -88.83059),
+    ],
+    "Watertown": [
+        ("121 Hospital Dr",     128, "Hospital",        43.19911, -88.69889),
+        ("1020 Hill St",         90, "Care facility",   43.20190, -88.70750),
+        ("1301 E Main St",       68, "",                43.19064, -88.71092),
+        ("1121 Highland Ave",    55, "",                43.20236, -88.70860),
+        ("1047 Hill St",         51, "",                43.20190, -88.70667),
+        ("700 Welsh Rd",         45, "",                43.20658, -88.75879),
+        ("106 Jones St",         25, "",                43.19585, -88.72355),
+    ],
+    "Johnson Creek": [
+        ("1 Hartwig Dr",         43, "",                43.08338, -88.76660),
+        ("W5095 River Dr",       26, "",                43.18084, -88.72831),
+        ("N7855 Little Coffee Rd",13,"",                43.16500, -88.74000),
+        ("440 Wright Rd",         9, "",                43.08180, -88.75990),
+        ("1275 Remmel Dr",        9, "",                43.09206, -88.75912),
+        ("1 Bobcat Ln",           8, "",                43.08169, -88.77051),
+    ],
+    "Lake Mills": [
+        ("300 O'Neil St",        14, "",                43.08338, -88.90227),
+        ("144 E Prospect St",    10, "",                43.08577, -88.90823),
+        ("901 Mulberry St",       9, "",                43.08522, -88.90281),
+        ("403 O'Neil St",         8, "",                43.08276, -88.90125),
+        ("228 Water St",          7, "",                43.07855, -88.91090),
+        ("200 E Tyranena Park Rd",7, "",                43.08919, -88.90616),
+    ],
+    "Whitewater": [
+        ("N346 Twinkling Star Rd",8, "",                42.85222, -88.79576),
+        ("N374 Twinkling Star Rd",5, "",                42.84911, -88.79660),
+    ],
+    # Departments below 5-call threshold or no address data: Cambridge, Ixonia, Palmyra, Waterloo, Jefferson
+    # Edgerton excluded — Looker report shows Fort Atkinson addresses (data join error)
+    # Western Lakes addresses truncated in PDF bar chart — excluded pending full data
+}
+
+# ── Filter to EMS-only scope ─────────────────────────────────────────────────
+# The project focuses exclusively on EMS calls. Filter raw NFIRS to EMS rows only.
+raw = raw[raw["IsEMS"]].copy()
+rt_clean = raw[raw["RT"].between(0, 60)].copy()
+
+print(f"  {len(raw):,} EMS incidents after filtering, {raw['Department'].nunique()} departments")
+
 # ── Pre-aggregated summary tables (callbacks filter these instead of raw) ─────
 _dept_vol = raw.groupby("Department").agg(
     Total=("Department", "size"),
-    EMS=("IsEMS", "sum"),
+    EMS=("Department", "size"),  # All rows are EMS now
 ).reset_index()
-_dept_vol["NonEMS"] = _dept_vol["Total"] - _dept_vol["EMS"]
 
 _dept_hour = raw.groupby(["Department", "Hour"]).size().reset_index(name="Calls")
 _dept_month = raw.groupby(["Department", "Month"]).size().reset_index(name="Calls")
@@ -203,13 +294,11 @@ _dept_inc_type = raw.groupby(["Department", "Incident Type Code Category Descrip
 _dept_aid = raw.groupby(["Department", "Aid Given or Received Description"]).size().reset_index(name="Calls")
 
 # ── Computed globals for dynamic KPI cards ────────────────────────────────────
-_total_incidents = len(raw)
-_ems_incidents   = int(raw["IsEMS"].sum())
-_ems_pct         = f"{100*_ems_incidents/_total_incidents:.1f}%"
+_total_ems_calls = _AUTH_COUNTY_TOTAL           # Authoritative total: 14,853
 _avg_rt          = f"{rt_clean['RT'].mean():.1f} min"
 _med_rt          = f"{rt_clean['RT'].median():.1f} min"
-_n_depts         = raw['Department'].nunique()
-_ems_rt_clean    = rt_clean[rt_clean["IsEMS"]]
+_n_depts         = len(AUTH_EMS_CALLS)          # 12 EMS-providing communities
+_ems_rt_clean    = rt_clean.copy()              # All rows are EMS now
 _pct_ems_over8   = f"{100*(_ems_rt_clean['RT'] > 8).sum()/len(_ems_rt_clean):.1f}%"
 
 # ── 2. Load comparison workbook ───────────────────────────────────────────────
@@ -218,7 +307,6 @@ comparison   = xl.parse("Comparison")          # FIX 9: loaded but previously un
 muni_kpi     = xl.parse("Jeff_Municipal_Breakdown")
 rt_pct       = xl.parse("Jeff_Response_Percentiles")
 call_types   = xl.parse("Jeff_Call_Types")
-ems_types    = xl.parse("Jeff_EMS_Incident_Types")
 portage_vol  = xl.parse("Portage_Call_Volume_Trend")
 portage_rev  = xl.parse("Portage_Revenue_Trend")
 portage_pay  = xl.parse("Portage_Payor_Mix_2024")
@@ -317,6 +405,61 @@ wi_billing_benchmarks = pd.DataFrame([
      "Source": "ci.brookfield.wi.us (2025)", "Note": "Suburban benchmark (prior research)"},
 ])
 
+# ── 3c. Billing Revenue — Actual Net Collections (EMS|MC / Chief Association) ─
+# Source: "Jefferson County Chief Association Agency Data 2025.xlsx" (new3.31.26/)
+# These are actual net collections from the billing vendor, NOT budget estimates.
+# 9 agencies reporting. Missing: Cambridge, Western Lakes, Whitewater.
+BILLING_COLLECTIONS = pd.DataFrame([
+    {"Agency": "Jefferson",     "Collections_2024":  667683.27, "Collections_2025":  789696.91},
+    {"Agency": "Watertown",     "Collections_2024":  823865.88, "Collections_2025": 1004584.35},
+    {"Agency": "Palmyra",       "Collections_2024":   63921.77, "Collections_2025":  104826.42},
+    {"Agency": "Waterloo",      "Collections_2024":   12089.18, "Collections_2025":  268717.20},
+    {"Agency": "Ixonia",        "Collections_2024":   99632.04, "Collections_2025":  148941.94},
+    {"Agency": "Johnson Creek", "Collections_2024":  224779.84, "Collections_2025":  303297.11},
+    {"Agency": "Edgerton",      "Collections_2024":  960738.03, "Collections_2025": 1239440.54},
+    {"Agency": "Fort Atkinson", "Collections_2024":  594919.61, "Collections_2025":  791679.53},
+    {"Agency": "Lake Mills",    "Collections_2024":   22755.88, "Collections_2025":   47789.73},
+])
+BILLING_COLLECTIONS["Change"]     = BILLING_COLLECTIONS["Collections_2025"] - BILLING_COLLECTIONS["Collections_2024"]
+BILLING_COLLECTIONS["Pct_Change"] = ((BILLING_COLLECTIONS["Change"] / BILLING_COLLECTIONS["Collections_2024"]) * 100).round(1)
+
+# ── 3d. Mill Rate Levy Projections (WI DOA population-based) ─────────────────
+# Source: "Emergency Services Population - Jefferson County.xlsx" (new3.31.26/)
+#   -> "Payment by Service Provider" sheet.
+# Shows hypothetical county EMS levy amounts at different mill rates.
+_MILL_RATES = [0.1, 0.2, 0.25, 0.3, 0.4, 0.5, 0.75, 1.0]
+LEVY_BY_PROVIDER = pd.DataFrame([
+    {"Provider": "Cambridge",     0.1:   4948, 0.2:   9896, 0.25:  12370, 0.3:  14844, 0.4:  19792, 0.5:  24740, 0.75:  37110, 1.0:  49479},
+    {"Provider": "Edgerton",      0.1:   7118, 0.2:  14236, 0.25:  17795, 0.3:  21354, 0.4:  28472, 0.5:  35591, 0.75:  53386, 1.0:  71181},
+    {"Provider": "Fort Atkinson", 0.1: 269519, 0.2: 539037, 0.25: 673796, 0.3: 808556, 0.4:1078074, 0.5:1347593, 0.75:2021389, 1.0:2695186},
+    {"Provider": "Ixonia",        0.1:  86633, 0.2: 173265, 0.25: 216581, 0.3: 259898, 0.4: 346530, 0.5: 433163, 0.75: 649744, 1.0: 866325},
+    {"Provider": "Jefferson",     0.1: 161922, 0.2: 323845, 0.25: 404806, 0.3: 485767, 0.4: 647689, 0.5: 809612, 0.75:1214418, 1.0:1619224},
+    {"Provider": "Johnson Creek", 0.1:  81034, 0.2: 162067, 0.25: 202584, 0.3: 243101, 0.4: 324134, 0.5: 405168, 0.75: 607751, 1.0: 810335},
+    {"Provider": "Palmyra",       0.1:  42781, 0.2:  85562, 0.25: 106952, 0.3: 128343, 0.4: 171124, 0.5: 213905, 0.75: 320857, 1.0: 427810},
+    {"Provider": "Lake Mills",    0.1: 160519, 0.2: 321038, 0.25: 401298, 0.3: 481557, 0.4: 642076, 0.5: 802595, 0.75:1203893, 1.0:1605190},
+    {"Provider": "Waterloo",      0.1:  66595, 0.2: 133190, 0.25: 166487, 0.3: 199784, 0.4: 266379, 0.5: 332974, 0.75: 499461, 1.0: 665948},
+    {"Provider": "Watertown",     0.1: 239064, 0.2: 478128, 0.25: 597660, 0.3: 717192, 0.4: 956256, 0.5:1195320, 0.75:1792981, 1.0:2390641},
+    {"Provider": "Western Lakes", 0.1:  65206, 0.2: 130412, 0.25: 163015, 0.3: 195618, 0.4: 260823, 0.5: 326029, 0.75: 489044, 1.0: 652059},
+    {"Provider": "Whitewater",    0.1:  71253, 0.2: 142507, 0.25: 178133, 0.3: 213760, 0.4: 285013, 0.5: 356267, 0.75: 534400, 1.0: 712534},
+])
+_LEVY_COUNTY_TOTALS = {r: int(LEVY_BY_PROVIDER[r].sum()) for r in _MILL_RATES}
+
+# ── 3e. Provider-Level Call Data Summary (new3.31.26/Data from Providers) ────
+PROVIDER_CALL_SUMMARY = pd.DataFrame([
+    {"Department": "Edgerton (Lakeside)", "Records": 289, "Data_Fields": "Date, Address, Transport Type, Care Level",
+     "Care_Level": "ALS Ground Transport", "Has_RT": "No", "Source_File": "Edgerton EMS_Incidents.csv"},
+    {"Department": "Jefferson",           "Records": 1457, "Data_Fields": "Date, Dispatch/Enroute/Arrival, City, Township",
+     "Care_Level": "Mixed (ALS primary)", "Has_RT": "Yes", "Source_File": "Jefferson Fire Dept 2024 EMS Call Data.xlsx"},
+    {"Department": "Johnson Creek",       "Records": 487, "Data_Fields": "Date, Address, Type, Zone, Dispatch-Arrival, Mode",
+     "Care_Level": "Mixed EMS types", "Has_RT": "Yes", "Source_File": "Johnson Creek EMS Data 2024.csv"},
+    {"Department": "Lake Mills (Ryan Bros)", "Records": 518, "Data_Fields": "Date, Dispatch/Enroute, Address, Service Type, Care Level",
+     "Care_Level": "ALS-Paramedic", "Has_RT": "Yes", "Source_File": "Lake Mills Ryan Bros EMS Data 2024.csv"},
+    {"Department": "Waterloo",            "Records": 520, "Data_Fields": "Date, Time, Transport, Address, Care Level, RT",
+     "Care_Level": "ALS-AEMT", "Has_RT": "Yes", "Source_File": "Waterloo Call Data.xlsx"},
+    {"Department": "Whitewater (Jeff Co)", "Records": 64, "Data_Fields": "Date, Incident Type, Address, ZIP, District",
+     "Care_Level": "Mixed", "Has_RT": "No", "Source_File": "Whitewater Fire Dept Call Data...xlsx"},
+])
+
 # ── ALS/BLS service level by department (from web research Mar 2026) ──────────
 # Sources: department websites, Wisconsin EMS Association, NPI profiles, news reports.
 # Confidence: High = confirmed from official source; Medium = inferred; Low = unknown.
@@ -339,34 +482,119 @@ ALS_LEVELS = {
     "Western Lakes":  {"Level": "ALS",  "Notes": "Multi-county ALS; primary service area is Waukesha Co.", "Confidence": "High"},
 }
 
-# ── 3a. Service Area Population (Census ACS / WI DOA 2024-25 estimates) ──────
-# Sources: Census Reporter, data.census.gov, WI DOA Final_Ests_Muni_2025.xlsx
-# Service area = municipality + surrounding townships served by that department.
-# Some departments cross county lines; figures reflect Jefferson County service only.
+# ── ALS/BLS action-type percentages (from Looker Studio PDFs, 2024) ─────────
+# What % of calls result in ALS vs BLS-level care. Derived from "Primary Action Taken"
+# or "Level of Care Provided" fields in each department's Looker Studio report.
+# Departments not listed had no ALS/BLS split available in their report.
+ALS_BLS_PCTS = {
+    "Fort Atkinson":  {"ALS": 49.8, "BLS": 35.2, "Other": 15.0},
+    "Edgerton":       {"ALS": 48.0, "BLS": 32.1, "Other": 19.9},
+    "Ixonia":         {"ALS": 50.0, "BLS": 20.2, "Other": 29.8},
+    "Watertown":      {"ALS": 49.8, "BLS": 28.3, "Other": 21.9},
+    "Western Lakes":  {"ALS": 21.4, "BLS": 39.2, "Other": 39.4},
+    "Lake Mills":     {"ALS": 46.3, "BLS": 19.7, "Critical Care": 19.1, "Other": 14.9},
+    "Palmyra":        {"ALS": 0.0,  "BLS": 59.4, "Other": 40.6},
+    "Waterloo":       {"ALS": 13.7, "BLS": 9.6, "Transport": 44.6, "First Aid": 18.2, "Other": 13.9},
+}
+
+# ── 3a. Service Area Population (WI DOA Preliminary 2025 Estimates) ──────────
+# Source: "Emergency Services Population - Jefferson County.xlsx" (new3.31.26/)
+#   → "Sorted by Provider" sheet — WI Dept of Administration Preliminary 2025 Estimates.
+#   Populations assigned by responding EMS unit and municipality coverage ratio.
+#   County total: 86,855.  Supersedes prior Census ACS / DOA estimates.
 SERVICE_AREA_POP = {
-    "Watertown":     23000,   # City (14,674 Jeff + 8,252 Dodge) + Town of Watertown
-    "Fort Atkinson": 16300,   # City (12,579) + Town of Koshkonong (3,763)
-    "Whitewater":     4296,   # Jefferson Co. portion only (ACS 2024 5-yr)
-    "Jefferson":      7800,   # City of Jefferson (7,793)
-    "Lake Mills":     8700,   # City (6,211) + Town of Lake Mills (2,317)
-    "Johnson Creek":  3367,   # Village (3,318 → 3,367 ACS 2023 5-yr)
-    "Cambridge":      1650,   # Village total (Dane + Jefferson; Jeff portion only ~99)
-    "Palmyra":        3341,   # Village (2,195) + Town of Palmyra (1,146)
-    "Ixonia":         5078,   # Town of Ixonia (5,078 ACS 2024 5-yr)
-    "Edgerton":       3763,   # Town of Koshkonong (Jeff Co. portion of Lakeside district)
-    "Waterloo":       4415,   # City (3,542) + Town of Waterloo (873)
-    "Western Lakes":  2974,   # Town of Sullivan (2,323) + Village of Sullivan (651)
-    "Helenville":     1500,   # Small district — estimated from GeoJSON area
+    "Watertown":     16524,   # City of Watertown 14,628 + Town of Milford 746 + Town of Watertown 1,150
+    "Fort Atkinson": 18629,   # City of Fort Atkinson 12,455 + T. Hebron 659 + T. Jefferson 349 + T. Koshkonong 3,486 + T. Oakland 1,183 + T. Sumner 497
+    "Whitewater":     4925,   # City of Whitewater 4,029 + Town of Cold Spring 737 + Town of Koshkonong 159
+    "Jefferson":     11192,   # City of Jefferson 7,806 + T. Aztalan 665 + T. Farmington 461 + T. Hebron 392 + T. Jefferson 1,700 + T. Oakland 166 + T. Sullivan 2
+    "Lake Mills":    11095,   # City of Lake Mills 6,835 + T. Aztalan 396 + T. Lake Mills 1,983 + T. Oakland 1,881 (Ryan Brothers EMS)
+    "Johnson Creek":  5601,   # Village of Johnson Creek 3,702 + T. Aztalan 312 + T. Farmington 940 + T. Milford 284 + T. Watertown 363
+    "Cambridge":       342,   # Village of Cambridge 102 + Town of Lake Mills 240 (Jeff Co. portion only)
+    "Palmyra":        2957,   # Village of Palmyra 1,717 + Town of Palmyra 1,240
+    "Ixonia":         5988,   # Village of Lac La Belle 2 + T. Concord 444 + T. Ixonia 5,092 + T. Watertown 450
+    "Edgerton":        492,   # Town of Koshkonong 159 + Town of Sumner 333 (Jeff Co. portion of Lakeside district)
+    "Waterloo":       4603,   # City of Waterloo 3,644 + Town of Milford 81 + Town of Waterloo 878
+    "Western Lakes":  4507,   # Village of Sullivan 657 + T. Concord 1,514 + T. Palmyra 2 + T. Sullivan 2,334
+    "Helenville":     1500,   # Small district — estimated from GeoJSON area (not in DOA provider breakdown)
     # Rome and Sullivan are fire-only — no EMS service area population relevant
     "Rome":           2800,   # Cold Spring town + Sumner town (fire-only, no EMS)
     "Sullivan":       2860,   # Sullivan town + village (fire-only, EMS by Western Lakes)
 }
 # Population data sources (for dashboard citation):
 _POP_SOURCES = [
-    ("Census Reporter — Jefferson Co.", "https://censusreporter.org/profiles/05000US55055-jefferson-county-wi/"),
-    ("data.census.gov (ACS 2020–2024)", "https://data.census.gov"),
-    ("WI DOA 2025 Municipal Estimates", "https://doa.wi.gov/DIR/Final_Ests_Muni_2025.xlsx"),
+    ("Emergency Services Population - Jefferson County.xlsx (new3.31.26/)", "WI DOA Preliminary 2025 Estimates — Sorted by Provider sheet"),
+    ("WI DOA 2025 Preliminary Municipal Estimates", "https://doa.wi.gov/DIR/Final_Ests_Muni_2025.xlsx"),
 ]
+
+# ── Multi-provider coverage areas (from Emergency Services Population xlsx) ──
+# Towns served by 2+ EMS providers — indicates mutual aid corridors and
+# coverage overlap. Data from "Raw Data" sheet, WI DOA 2025 estimates.
+# Format: municipality → [(provider, population_served), ...]
+MULTI_PROVIDER_COVERAGE = {
+    "Town of Aztalan":    [("Jefferson", 665), ("Johnson Creek", 312), ("Lake Mills", 396)],
+    "Town of Concord":    [("Ixonia", 444), ("Western Lakes", 1514)],
+    "Town of Farmington": [("Jefferson", 461), ("Johnson Creek", 940)],
+    "Town of Hebron":     [("Fort Atkinson", 659), ("Jefferson", 392)],
+    "Town of Ixonia":     [("Ixonia", 5092), ("Watertown", 0)],   # Ixonia primary; Watertown minor overlap
+    "Town of Jefferson":  [("Fort Atkinson", 349), ("Jefferson", 1700)],
+    "Town of Koshkonong": [("Edgerton", 159), ("Fort Atkinson", 3486), ("Whitewater", 159)],
+    "Town of Lake Mills":  [("Cambridge", 240), ("Lake Mills", 1983)],
+    "Town of Milford":    [("Johnson Creek", 284), ("Waterloo", 81), ("Watertown", 746)],
+    "Town of Oakland":    [("Fort Atkinson", 1183), ("Jefferson", 166), ("Lake Mills", 1881)],
+    "Town of Palmyra":    [("Palmyra", 1240), ("Western Lakes", 2)],
+    "Town of Sullivan":   [("Jefferson", 2), ("Western Lakes", 2334)],
+    "Town of Sumner":     [("Edgerton", 333), ("Fort Atkinson", 497)],
+    "Town of Watertown":  [("Ixonia", 450), ("Johnson Creek", 363), ("Watertown", 1150)],
+}
+
+# ── Service Area Population table for Contracts tab ────────────────────────
+# Derived from Emergency Services Population - Jefferson County.xlsx
+# "Sorted by Provider" sheet — WI DOA Preliminary 2025 Estimates
+_SVC_AREA_POP_DATA = {
+    "Cambridge":     {"pop": 342,   "munis": "Village of Cambridge, Town of Lake Mills (partial)"},
+    "Edgerton":      {"pop": 492,   "munis": "Town of Koshkonong (partial), Town of Sumner (partial)"},
+    "Fort Atkinson": {"pop": 18629, "munis": "City of Fort Atkinson, Towns of Hebron, Jefferson, Koshkonong, Oakland, Sumner (partial)"},
+    "Ixonia":        {"pop": 5988,  "munis": "Village of Lac La Belle, Towns of Concord (partial), Ixonia, Watertown (partial)"},
+    "Jefferson":     {"pop": 11192, "munis": "City of Jefferson, Towns of Aztalan, Farmington, Hebron, Jefferson, Oakland, Sullivan (partial)"},
+    "Johnson Creek": {"pop": 5601,  "munis": "Village of Johnson Creek, Towns of Aztalan, Farmington, Milford, Watertown (partial)"},
+    "Palmyra":       {"pop": 2957,  "munis": "Village of Palmyra, Town of Palmyra"},
+    "Lake Mills":    {"pop": 11095, "munis": "City of Lake Mills, Towns of Aztalan, Lake Mills, Oakland (partial) — Ryan Brothers EMS"},
+    "Waterloo":      {"pop": 4603,  "munis": "City of Waterloo, Towns of Milford (partial), Waterloo"},
+    "Watertown":     {"pop": 16524, "munis": "City of Watertown, Towns of Milford (partial), Watertown (partial)"},
+    "Western Lakes": {"pop": 4507,  "munis": "Village of Sullivan, Towns of Concord (partial), Palmyra (partial), Sullivan"},
+    "Whitewater":    {"pop": 4925,  "munis": "City of Whitewater (Jeff Co. portion), Towns of Cold Spring, Koshkonong (partial)"},
+}
+_COUNTY_POP = 86855
+_SVC_AREA_POP_TABLE = [
+    {"Provider": p,
+     "Municipalities": d["munis"],
+     "Population": f"{d['pop']:,}",
+     "Pct_County": f"{d['pop'] / _COUNTY_POP * 100:.1f}%"}
+    for p, d in sorted(_SVC_AREA_POP_DATA.items(), key=lambda x: x[1]["pop"], reverse=True)
+]
+
+def _get_fig_svc_area_pop():
+    """Horizontal bar chart of service area population by EMS provider."""
+    providers = sorted(_SVC_AREA_POP_DATA.keys(), key=lambda p: _SVC_AREA_POP_DATA[p]["pop"])
+    pops = [_SVC_AREA_POP_DATA[p]["pop"] for p in providers]
+    fig = go.Figure(go.Bar(
+        y=providers, x=pops, orientation="h",
+        marker_color=C_PRIMARY,
+        text=[f"{p:,}" for p in pops],
+        textposition="outside",
+        hovertemplate="<b>%{y}</b><br>Population: %{x:,}<extra></extra>",
+    ))
+    fig.update_layout(
+        title="EMS Service Area Population by Provider — WI DOA 2025<br>"
+              "<sup>Jefferson County only (86,855 total) · Some towns split between providers</sup>",
+        xaxis_title="Service Area Population",
+    )
+    _apply_chart_style(fig, height=450, title_has_subtitle=True)
+    fig.update_layout(
+        margin=dict(l=120, r=80, t=70, b=30),
+        yaxis=dict(tickfont=dict(size=12, color=C_TEXT)),
+    )
+    return fig
 
 # ── External benchmarks (for reference lines on charts) ──────────────────────
 # Sources documented inline; all confirmed from published reports.
@@ -380,7 +608,7 @@ _BENCH = {
     "nfpa_1720_rural_min":   14,      # NFPA 1720 rural (vol depts, 80th pctl)
     "nfpa_1720_suburban_min": 10,     # NFPA 1720 suburban (vol depts, 80th pctl)
     "fa_actual_collected":   666,     # Fort Atkinson avg transport fee received (Peterson projection)
-    "jeff_county_pop":       86245,   # ACS 2024 1-yr estimate
+    "jeff_county_pop":       86855,   # WI DOA Preliminary 2025 Estimate (Emergency Services Population xlsx)
 }
 _BENCH_SOURCES = [
     ("Northwestern EMS — EMS in Wisconsin", "https://northwesternems.org/ems-in-wisconsin"),
@@ -570,6 +798,19 @@ for feat in geojson_data["features"]:
     p["ambulances"]    = _a.get("Ambulances", 0) or 0
     p["ems_personnel"] = _a.get("EMS_Personnel", 0) or 0
     p["service_level"] = ALS_LEVELS.get(dept, {}).get("Level", "N/A")
+
+# ── 5a-2. Enrich EMS district GeoJSON with dept names for choropleth coloring ──
+_EMS_LABEL_TO_DEPT = {
+    "Ixonia EMS": "Ixonia", "Watertown EMS": "Watertown", "Whitewater EMS": "Whitewater",
+    "Western Lakes": "Western Lakes", "Palmyra EMS": "Palmyra",
+    "Ryan Brothers EMS": "Lake Mills", "Waterloo EMS": "Waterloo",
+    "Fort Atkinson EMS": "Fort Atkinson", "Edgerton EMS": "Edgerton",
+    "Johnson Creek EMS": "Johnson Creek", "Jefferson EMS": "Jefferson",
+    "Cambridge EMS": "Cambridge",
+}
+for feat in geojson_ems_districts["features"]:
+    label = feat["properties"].get("MAPLABEL", "")
+    feat["properties"]["dept"] = _EMS_LABEL_TO_DEPT.get(label, label)
 
 # Precompute bounding boxes per department (for click-to-zoom & zoom-to-fit)
 DEPT_BOUNDS = {}  # {dept_name: [[south, west], [north, east]]}
@@ -835,24 +1076,41 @@ def _compute_color_map(metric):
     """Return {dept_name: color_string} for all departments."""
     return {d: _choropleth_color(d, metric) for d in STATION_COORDS}
 
-# JavaScript style function for GeoJSON choropleth — reads hideout.colorMap
+# JavaScript style function for Census subdivision GeoJSON — invisible by default,
+# toggle-able via "Municipal Boundaries" checkbox (showMuniBorders in hideout)
 _geojson_style = assign("""function(feature, context) {
-    var dept = feature.properties.dept || feature.properties.NAME;
-    var cm = context.hideout.colorMap || {};
+    var showBorders = context.hideout.showMuniBorders || false;
     return {
-        fillColor: cm[dept] || '#CBD5E1',
-        color: '#334155',
-        weight: 1.5,
-        fillOpacity: 0.50,
+        fillColor: 'transparent',
+        color: showBorders ? '#334155' : 'transparent',
+        weight: showBorders ? 1.5 : 0,
+        fillOpacity: 0,
     };
 }""")
 
-# Overlay layer styles (EMS / Fire districts, Helenville)
-_ems_district_style = assign("""function(feature) {
-    return {fillColor: '#00BCD4', color: '#00ACC1', weight: 2, fillOpacity: 0.18, dashArray: '6 4'};
+# EMS district choropleth — the PRIMARY colored map layer.
+# Reads hideout.colorMap keyed by dept name to fill each EMS district polygon.
+_ems_district_style = assign("""function(feature, context) {
+    var dept = feature.properties.dept || '';
+    var cm = (context.hideout || {}).colorMap || {};
+    return {
+        fillColor: cm[dept] || '#CBD5E1',
+        color: '#00838F',
+        weight: 2.5,
+        fillOpacity: 0.45,
+    };
 }""")
+_ems_district_label = assign("""function(feature, layer) {
+    var name = feature.properties.MAPLABEL || '';
+    if (name) {
+        layer.bindTooltip('<b>' + name + '</b>', {
+            sticky: true, direction: 'top', opacity: 0.92
+        });
+    }
+}""")
+# Fire districts differ from EMS districts — shown for reference only
 _fire_district_style = assign("""function(feature) {
-    return {fillColor: '#FF5722', color: '#E64A19', weight: 2, fillOpacity: 0.18, dashArray: '6 4'};
+    return {fillColor: '#FF5722', color: '#E64A19', weight: 1.5, fillOpacity: 0.10, dashArray: '4 3'};
 }""")
 _helenville_style = assign("""function(feature) {
     return {fillColor: '#FFEB3B', color: '#FBC02D', weight: 2, fillOpacity: 0.22, dashArray: '4 3'};
@@ -1071,6 +1329,7 @@ MODEL_COLORS = {
 # ── 8. App layout ─────────────────────────────────────────────────────────────
 app = Dash(__name__, title="Jefferson County EMS Dashboard",
            suppress_callback_exceptions=True)
+server = app.server  # expose Flask server for gunicorn
 
 MONTH_NAMES = {1:"Jan",2:"Feb",3:"Mar",4:"Apr",5:"May",6:"Jun",
                7:"Jul",8:"Aug",9:"Sep",10:"Oct",11:"Nov",12:"Dec"}
@@ -1459,120 +1718,24 @@ _df_jeff_bayfield_compare = pd.DataFrame([
     },
 ])
 
-# ── Section 15 Static Data (no callbacks — all hard-coded) ────────────────────
+# ── Section 15 Static Data (kept for future use — not displayed in current tabs) ─
 
 # 15a: Cost/call with volume threshold indicator
 # Source: savings_model.md 300-call table + utilization_analysis.md
 _df_cost_threshold = pd.DataFrame([
-    # Palmyra: NFIRS data covers only 3 months (Jan-Mar). 35 calls extrapolated to ~140 annual.
-    {"Municipality": "Palmyra*",      "Cost_Per_Call":  5841, "Total_Calls":  140},
-    {"Municipality": "Jefferson",     "Cost_Per_Call":  6304, "Total_Calls":  238},
-    {"Municipality": "Waterloo",      "Cost_Per_Call":  2120, "Total_Calls":  520},
-    {"Municipality": "Johnson Creek", "Cost_Per_Call":  1783, "Total_Calls":  636},
-    {"Municipality": "Ixonia",        "Cost_Per_Call":  1867, "Total_Calls":  338},
-    {"Municipality": "Whitewater",    "Cost_Per_Call":  1496, "Total_Calls": 1812},
-    {"Municipality": "Watertown",     "Cost_Per_Call":  1410, "Total_Calls": 2719},
-    {"Municipality": "Cambridge",     "Cost_Per_Call":   467, "Total_Calls":  197},
-    {"Municipality": "Fort Atkinson", "Cost_Per_Call":   367, "Total_Calls": 2076},
-    {"Municipality": "Edgerton",      "Cost_Per_Call":   285, "Total_Calls": 2472},
+    {"Municipality": "Palmyra",       "Cost_Per_Call": 25555, "EMS_Calls":    32},
+    {"Municipality": "Jefferson",     "Cost_Per_Call":  1030, "EMS_Calls":  1457},
+    {"Municipality": "Johnson Creek", "Cost_Per_Call":  2329, "EMS_Calls":   487},
+    {"Municipality": "Ixonia",        "Cost_Per_Call":  2184, "EMS_Calls":   289},
+    {"Municipality": "Waterloo",      "Cost_Per_Call":  2120, "EMS_Calls":   520},
+    {"Municipality": "Watertown",     "Cost_Per_Call":  1905, "EMS_Calls":  2012},
+    {"Municipality": "Cambridge",     "Cost_Per_Call":  1057, "EMS_Calls":    87},
+    {"Municipality": "Lake Mills",    "Cost_Per_Call":   670, "EMS_Calls":   518},
+    {"Municipality": "Fort Atkinson", "Cost_Per_Call":   471, "EMS_Calls":  1616},
+    {"Municipality": "Edgerton",      "Cost_Per_Call":   330, "EMS_Calls":  2138},
 ])
-# Volume tiers from data quartiles
-_vol_p25 = _df_cost_threshold["Total_Calls"].quantile(0.25)
-_vol_p75 = _df_cost_threshold["Total_Calls"].quantile(0.75)
-_df_cost_threshold["Volume_Cat"] = _df_cost_threshold["Total_Calls"].apply(
-    lambda v: f"Below {_vol_p25:,.0f} (Bottom quartile)" if v < _vol_p25
-    else f"Above {_vol_p75:,.0f} (Top quartile)" if v > _vol_p75
-    else f"{_vol_p25:,.0f}\u2013{_vol_p75:,.0f} (Middle)"
-)
-# Sort descending by cost/call for horizontal bar
-_df_cost_threshold = _df_cost_threshold.sort_values("Cost_Per_Call", ascending=True).reset_index(drop=True)
 
-# Color map for volume categories — dynamic keys from quartile labels
-_vol_cats = _df_cost_threshold["Volume_Cat"].unique()
-_VOL_COLOR_MAP = {
-    c: "#D94133" if "Bottom" in c else "#10B981" if "Top" in c else "#F7C143"
-    for c in _vol_cats
-}
-_bar_colors_15a = [_VOL_COLOR_MAP[c] for c in _df_cost_threshold["Volume_Cat"]]
-
-_COUNTY_MEDIAN_15a = _df_cost_threshold["Cost_Per_Call"].median()
-_OUTLIER_THRESH_15a = _COUNTY_MEDIAN_15a * 2  # 2x county median
-
-@lru_cache(maxsize=1)
-def _get_fig_cost_threshold():
-    fig = go.Figure(go.Bar(
-        x=_df_cost_threshold["Cost_Per_Call"],
-        y=_df_cost_threshold["Municipality"],
-        orientation="h",
-        marker_color=_bar_colors_15a,
-        text=[
-            f"${v:,.0f}  ({n:,} calls)"
-            for v, n in zip(_df_cost_threshold["Cost_Per_Call"], _df_cost_threshold["Total_Calls"])
-        ],
-        textposition="outside",
-        hovertemplate=(
-            "<b>%{y}</b><br>"
-            "Cost/Call: $%{x:,.0f}<br>"
-            "Total Calls: %{customdata}<extra></extra>"
-        ),
-        customdata=_df_cost_threshold["Total_Calls"],
-    ))
-    fig.add_vline(
-        x=_COUNTY_MEDIAN_15a,
-        line_dash="dash", line_color=C_MUTED,
-        annotation_text=f"County median ${_COUNTY_MEDIAN_15a:,.0f}",
-        annotation_font_color=C_MUTED,
-        annotation_font_size=11,
-        annotation_position="top",
-    )
-    fig.add_vline(
-        x=_OUTLIER_THRESH_15a,
-        line_dash="dash", line_color=C_RED,
-        annotation_text=f"2x median outlier ${_OUTLIER_THRESH_15a:,.0f}",
-        annotation_font_color=C_RED,
-        annotation_font_size=11,
-        annotation_position="top",
-    )
-    for cat, col in _VOL_COLOR_MAP.items():
-        fig.add_trace(go.Bar(
-            x=[None], y=[None], orientation="h",
-            marker_color=col, name=cat, showlegend=True,
-        ))
-    fig.update_layout(
-        title=dict(
-            text=(
-                "Cost Per Call vs. Department Volume — Consolidation Threshold Analysis"
-                "<br><sup>Color = call volume tier  ·  Red dashed = outlier threshold (2x median)</sup>"
-            ),
-            font=dict(size=14),
-        ),
-        barmode="overlay",
-    )
-    _apply_chart_style(fig, height=460, legend_below=True, title_has_subtitle=True)
-    fig.update_layout(
-        margin=dict(l=130, r=100, t=80, b=120),
-        xaxis=dict(
-            tickprefix="$",
-            tickformat=",",
-            range=[0, 8000],
-            gridcolor=C_BORDER,
-            showline=False,
-            zeroline=False,
-            tickfont=dict(size=12, color=C_TEXT),
-        ),
-    )
-    # Footnote: Palmyra extrapolation note
-    fig.add_annotation(
-        text="*Palmyra: only 3 months of NFIRS data (Jan-Mar). Calls extrapolated to 12-month estimate (35 actual -> ~140 annual).",
-        xref="paper", yref="paper", x=0, y=-0.18,
-        showarrow=False, font=dict(size=10, color=C_MUTED),
-        align="left", xanchor="left",
-    )
-    return fig
-
-
-# 15b: Cost Driver Magnitude — grouped bar (Low/High side-by-side)
-# Source: savings_model.md + utilization_analysis.md cost magnitude data
+# 15b: Cost Driver Magnitude
 _df_savings = pd.DataFrame([
     {"Cost Driver": "Watertown Billing Rate Gap",                "Low_K": 400,  "High_K":  700, "Pending_Audit": False},
     {"Cost Driver": "Palmyra Sub-Threshold Transport",           "Low_K": 491,  "High_K":  572, "Pending_Audit": False},
@@ -1581,105 +1744,7 @@ _df_savings = pd.DataFrame([
     {"Cost Driver": "Jefferson Cost/Call Disparity (if audited)","Low_K": 900,  "High_K": 1050, "Pending_Audit": True},
 ])
 
-_SAVINGS_TARGET_K = 680   # 5% of $13.6M county-wide budget
-
-# Colors: confirmed items in primary orange gradient; Jefferson (pending audit) in dark grey
-_savings_colors_low  = [
-    "#F28C38" if not r else "#5C5C5C"
-    for r in _df_savings["Pending_Audit"]
-]
-_savings_colors_high = [
-    "#F7C143" if not r else "#3A3D42"
-    for r in _df_savings["Pending_Audit"]
-]
-
-_conservative_total_low  = 400 + 491 + 55 + 70   # = 1016
-_conservative_total_high = 700 + 572 + 64 + 100  # = 1436
-_full_total_low  = _conservative_total_low  + 900   # = 1916
-_full_total_high = _conservative_total_high + 1050  # = 2486
-
-@lru_cache(maxsize=1)
-def _get_fig_savings():
-    fig = go.Figure()
-    fig.add_trace(go.Bar(
-        name="Low Estimate",
-        x=_df_savings["Cost Driver"],
-        y=_df_savings["Low_K"],
-        marker_color=_savings_colors_low,
-        text=[f"${v:,}K" for v in _df_savings["Low_K"]],
-        textposition="outside",
-        hovertemplate="<b>%{x}</b><br>Low Estimate: $%{y:,}K<extra></extra>",
-    ))
-    fig.add_trace(go.Bar(
-        name="High Estimate",
-        x=_df_savings["Cost Driver"],
-        y=_df_savings["High_K"],
-        marker_color=_savings_colors_high,
-        text=[f"${v:,}K" for v in _df_savings["High_K"]],
-        textposition="outside",
-        hovertemplate="<b>%{x}</b><br>High Estimate: $%{y:,}K<extra></extra>",
-    ))
-    fig.add_hline(
-        y=_SAVINGS_TARGET_K,
-        line_dash="dash", line_color=C_RED, line_width=2,
-        annotation_text="5% of County EMS Budget ($680K) — Reference Line",
-        annotation_font_color=C_RED,
-        annotation_font_size=12,
-        annotation_position="right",
-    )
-    fig.update_layout(
-        title=dict(
-            text=(
-                "Estimated Annual Cost of Identified Inefficiencies by Department/Issue"
-                "<br><sup>Light gray bar = Jefferson City figures pending data audit  ·  All values in $K</sup>"
-            ),
-            font=dict(size=14),
-        ),
-        barmode="group",
-    )
-    _apply_chart_style(fig, height=500, legend_below=True, title_has_subtitle=True)
-    fig.update_layout(
-        margin=dict(l=40, r=40, t=85, b=150),
-        xaxis=dict(tickangle=-35, automargin=True, tickfont=dict(size=11, color=C_TEXT)),
-    )
-    # Annotation moved to bottom-center inside chart (not paper y>1 which overlaps title)
-    fig.add_annotation(
-        x=0.5, y=0.97, xref="paper", yref="paper",
-        text=(
-            f"Conservative (excl. Jefferson): ${_conservative_total_low:,}K–${_conservative_total_high:,}K  |  "
-            f"Full (incl. Jefferson): ${_full_total_low:,}K–${_full_total_high:,}K"
-        ),
-        showarrow=False,
-        font=dict(size=10, color=C_TEXT),
-        align="center",
-        bgcolor=C_CARD,
-        bordercolor=C_BORDER,
-        borderwidth=1,
-        borderpad=5,
-        yanchor="top",
-    )
-    fig.update_layout(
-        yaxis=dict(
-            tickprefix="$",
-            ticksuffix="K",
-            title="Annual Savings / New Revenue ($K)",
-            gridcolor=C_BORDER,
-            showline=False,
-            zeroline=False,
-            tickfont=dict(size=12, color=C_TEXT),
-        ),
-        xaxis=dict(
-            title=None,
-            gridcolor=C_BORDER,
-            showline=False,
-            zeroline=False,
-            tickfont=dict(size=12, color=C_TEXT),
-        ),
-    )
-    return fig
-
-
-# 15c: Levy Exception Eligibility Table
+# Levy Exception Eligibility Table (used in Contracts & Legal tab)
 # Source: savings_model.md EMS Levy Eligibility Analysis
 _df_levy_elig = pd.DataFrame([
     {
@@ -2393,8 +2458,8 @@ app.layout = html.Div([
             dcc.Checklist(
                 id="map-layers",
                 options=[
-                    {"label": "EMS Districts",  "value": "ems"},
-                    {"label": "Fire Districts",  "value": "fire"},
+                    {"label": "Municipal Boundaries",  "value": "muni"},
+                    {"label": "Fire Districts (reference only)",  "value": "fire"},
                     {"label": "Stations (FD/PD/EMS)", "value": "stations"},
                     {"label": "Helenville 1st Resp.", "value": "helenville"},
                     {"label": "ZIP Code Boundaries", "value": "zcta"},
@@ -2427,7 +2492,7 @@ app.layout = html.Div([
                     "fontSize": "1.2rem", "fontWeight": "700", "color": "white",
                     "fontFamily": FONT_STACK,
                 }),
-                html.Div("Operational Intelligence Platform  |  2024 NFIRS Data  |  FY2025 Budget", style={
+                html.Div("EMS System Data Review  |  2024 NFIRS Data  |  FY2025 Budgets", style={
                     "fontSize": "0.75rem", "color": "rgba(255,255,255,0.55)",
                     "marginTop": "2px", "fontFamily": FONT_STACK,
                 }),
@@ -2449,7 +2514,6 @@ app.layout = html.Div([
                 dcc.Tab(label="Financials & Staffing", value="tab-finance",   style=_TAB_STYLE, selected_style=_TAB_SELECTED_STYLE),
                 dcc.Tab(label="County Comparison",      value="tab-benchmark", style=_TAB_STYLE, selected_style=_TAB_SELECTED_STYLE),
                 dcc.Tab(label="Contracts & Legal",     value="tab-contracts", style=_TAB_STYLE, selected_style=_TAB_SELECTED_STYLE),
-                dcc.Tab(label="Recommendations",       value="tab-recommend", style=_TAB_STYLE, selected_style=_TAB_SELECTED_STYLE),
             ],
             style={"backgroundColor": C_NAVY, "borderBottom": "none"},
             colors={"border": "transparent", "primary": C_PRIMARY, "background": C_NAVY},
@@ -2523,30 +2587,13 @@ def render_tab(tab):
         return html.Div([
             html.Div(id="kpi-row", style={
                 "display": "flex", "gap": "14px", "flexWrap": "wrap", "marginBottom": "20px"}),
-            # Data quality notes
-            html.Div([
-                html.Div([html.Span("Data Quality Notes", style={
-                    "fontWeight": "700", "fontSize": "0.82rem", "color": C_YELLOW})],
-                    style={"marginBottom": "6px"}),
-                html.Ul([
-                    html.Li([html.B("Western Lakes: "),
-                        "NFIRS includes all 6,581 district calls; only ~200-250 are Jefferson Co."],
-                        style={"marginBottom": "3px"}),
-                    html.Li([html.B("Rome & Sullivan: "), "Fire only — EMS by Western Lakes."],
-                        style={"marginBottom": "3px"}),
-                    html.Li([html.B("Cambridge EMS: "), "2025 disruption; 2024 data is pre-disruption."],
-                        style={"marginBottom": "3px"}),
-                    html.Li([html.B("Lake Mills: "), "Ryan Brothers (private ALS) under contract since 2023."]),
-                ], style={"margin": "0", "paddingLeft": "18px", "lineHeight": "1.65"}),
-            ], style={
-                "background": "#2E2A1E", "border": f"1px solid {C_BORDER}",
-                "borderLeft": f"4px solid {C_YELLOW}", "borderRadius": "8px",
-                "padding": "12px 16px", "marginBottom": "20px",
-                "fontSize": "0.8rem", "color": C_TEXT, "fontFamily": FONT_STACK}),
             # Map
             html.Div([
                 _section_header("Jefferson County EMS District Map — 2024 NFIRS Data"),
-                html.P("Polygons = district boundaries. Markers = station locations. Toggle overlay layers in sidebar.",
+                html.P(["Colored polygons = municipal boundaries (Census). ",
+                         html.B("Cyan dashed outlines = EMS service districts"),
+                         " (authoritative — differ from fire districts). "
+                         "Toggle overlay layers in sidebar."],
                     style={"fontSize": "0.8rem", "color": C_MUTED, "margin": "0 0 12px",
                            "lineHeight": "1.55", "fontFamily": FONT_STACK}),
                 html.Div([
@@ -2555,14 +2602,18 @@ def render_tab(tab):
                         style={"width": "100%", "height": "580px", "borderRadius": "8px"},
                         children=[
                             dl.TileLayer(
-                                url="https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png",
-                                attribution='&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors'),
+                                url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>'),
                             dl.GeoJSON(id="map-geojson", data=geojson_data,
                                 options=dict(style=_geojson_style),
                                 zoomToBoundsOnClick=True,
+                                hideout={"showMuniBorders": False},
+                                hoverStyle={"weight": 2, "color": C_PRIMARY, "fillOpacity": 0.1}),
+                            dl.GeoJSON(id="map-ems-choropleth", data=geojson_ems_districts,
+                                options=dict(style=_ems_district_style,
+                                             onEachFeature=_ems_district_label),
                                 hideout={"colorMap": _compute_color_map("total_calls")},
-                                hoverStyle={"weight": 3, "color": C_PRIMARY, "fillOpacity": 0.6}),
-                            dl.LayerGroup(id="map-layer-ems", children=[]),
+                                hoverStyle={"weight": 4, "fillOpacity": 0.6}),
                             dl.LayerGroup(id="map-layer-fire", children=[]),
                             dl.LayerGroup(id="map-layer-stations", children=[]),
                             dl.LayerGroup(id="map-layer-helenville", children=[]),
@@ -2584,6 +2635,7 @@ def render_tab(tab):
                 _source_citation(
                     "2024 NFIRS — 14 department Excel files (ISyE Project/Data and Resources/Call Data/)",
                     "jefferson_county.geojson (Census TIGER 2023 boundaries)",
+                    "EMS district boundaries: Jefferson County GIS / ArcGIS Public Safety (authoritative — fire districts differ)",
                     "FY2025 municipal budget documents (station locations & staffing)",
                 ),
             ], style=CARD),
@@ -2610,30 +2662,19 @@ def render_tab(tab):
         return html.Div([
             html.Div([
                 _section_header("Call Volume — 2024 NFIRS Data"),
-                # Row 1: raw stacked volume — full width so all 15 depts are readable
+                # Row 1: EMS call volume — full width so all depts are readable
                 dcc.Graph(id="vol-bar"),
                 # Row 2: population-normalized — full width; Western Lakes bar is capped for readability
-                _sub_header("Calls per 1,000 Population (Western Lakes bar capped — see annotation)"),
+                _sub_header("EMS Calls per 1,000 Population (Western Lakes bar capped — see annotation)"),
                 dcc.Graph(id="vol-norm-bar"),
-                # Row 3: EMS share bar — full width for readability
-                _sub_header("EMS Share of Total Calls"),
+                # Row 3: Cost per EMS call
+                _sub_header("Cost per EMS Call"),
                 dcc.Graph(id="ems-pct-bar"),
                 _source_citation(
                     "2024 NFIRS — 14 department Excel files (ISyE Project/Data and Resources/Call Data/)",
-                    ("Census Reporter — Jefferson Co.", "https://censusreporter.org/profiles/05000US55055-jefferson-county-wi/"),
-                    ("data.census.gov — ACS 2020-2024", "https://data.census.gov"),
-                    ("WI DOA 2025 Municipal Estimates", "https://doa.wi.gov/DIR/Final_Ests_Muni_2025.xlsx"),
+                    "Emergency Services Population - Jefferson County.xlsx (WI DOA 2025 — service area populations)",
+                    "Call Volumes - Jefferson County EMS.xlsx (authoritative 2024 EMS call counts)",
                     ("WI statewide calls/1K benchmark — Northwestern EMS", "https://northwesternems.org/ems-in-wisconsin"),
-                ),
-            ], style=CARD),
-            html.Div([
-                _section_header("Incident Type Breakdown — 2024 NFIRS Data"),
-                dcc.Graph(id="inc-type-bar"),
-                _sub_header("EMS Incident Sub-Types — County Wide"),
-                dcc.Graph(id="ems-subtype-bar"),
-                _source_citation(
-                    "2024 NFIRS — 14 department Excel files (ISyE Project/Data and Resources/Call Data/)",
-                    "county_ems_comparison_data.xlsx — Jeff_EMS_Incident_Types sheet",
                 ),
             ], style=CARD),
             html.Div([
@@ -2660,6 +2701,20 @@ def render_tab(tab):
                 dcc.Graph(id="aid-ratio-bar"),
                 _source_citation(
                     "2024 NFIRS — 14 department Excel files (ISyE Project/Data and Resources/Call Data/)",
+                ),
+            ], style=CARD),
+            html.Div([
+                _section_header("Multi-Provider Coverage Areas — Jefferson County Towns"),
+                html.P(
+                    "Several rural towns are served by multiple EMS providers, with population "
+                    "allocated proportionally by coverage area. Overlap areas represent mutual aid "
+                    "corridors and coordination challenges.",
+                    style={"fontSize": "0.8rem", "color": C_MUTED, "margin": "0 0 12px",
+                           "fontFamily": FONT_STACK}),
+                dcc.Graph(id="coverage-overlap-bar"),
+                _source_citation(
+                    "Emergency Services Population - Jefferson County.xlsx (new3.31.26/)",
+                    "WI DOA Preliminary 2025 Estimates — Raw Data sheet",
                 ),
             ], style=CARD),
         ])
@@ -2704,13 +2759,17 @@ def render_tab(tab):
                 html.Div(id="drilldown-kpi-row",
                     style={"display": "flex", "gap": "12px", "flexWrap": "wrap", "marginBottom": "16px"}),
                 html.Div([
+                    dcc.Graph(id="drilldown-als-bls", style={"flex": "0 0 300px", "maxWidth": "320px"}),
                     dcc.Graph(id="drilldown-rt-hist", style={"flex": "1"}),
                     dcc.Graph(id="drilldown-hour-bar", style={"flex": "1"}),
-                ], style={"display": "flex", "gap": "16px"}),
+                ], style={"display": "flex", "gap": "16px", "flexWrap": "wrap"}),
                 dcc.Graph(id="drilldown-monthly"),
+                html.Div(id="drilldown-high-freq"),
+                html.Div(id="drilldown-data-quality"),
                 _source_citation(
                     "2024 NFIRS — 14 department Excel files (ISyE Project/Data and Resources/Call Data/)",
                     "FY2025 municipal budget documents (per-department staffing & financials)",
+                    "Looker Studio PDF reports (2024) — ALS/BLS action-type breakdowns, high-frequency addresses",
                 ),
             ], style=CARD),
         ])
@@ -2766,9 +2825,7 @@ def render_tab(tab):
                     "WI peer benchmarks: Waukesha (waukesha-wi.gov), Fitch-Rona (fitchronaems.com), "
                     "Madison (cityofmadison.com), Richfield (richfieldwi.gov), Brookfield (ci.brookfield.wi.us)",
                     "2024 NFIRS call volumes for cost-per-call calculation",
-                    ("Census Reporter — Jefferson Co.", "https://censusreporter.org/profiles/05000US55055-jefferson-county-wi/"),
-                    ("data.census.gov — ACS 2020-2024 (service area populations)", "https://data.census.gov"),
-                    ("WI DOA 2025 Municipal Estimates", "https://doa.wi.gov/DIR/Final_Ests_Muni_2025.xlsx"),
+                    "Emergency Services Population - Jefferson County.xlsx (WI DOA 2025 — service area populations)",
                     ("Northwestern EMS — WI avg EMS user fee $36/capita", "https://northwesternems.org/ems-in-wisconsin"),
                 ),
                 html.Div([
@@ -2780,9 +2837,8 @@ def render_tab(tab):
                         "returned zero results — small WI fire departments do not publish fee schedules online. "
                         "Municipal fee schedules, board minutes, budget documents, and statewide surveys were "
                         "checked for each department individually. No WI statewide EMS billing rate database exists. "
-                        "Next approach: request rates directly from fire chiefs at the March 11 Working Group meeting, "
-                        "or submit batch Open Records requests to each department. "
-                        "EMS|MC (shared billing vendor for several depts) may also have consolidated rate data: (800) 849-5603.",
+                        "Data collection path: direct request from fire chiefs or batch Open Records requests. "
+                        "EMS|MC (shared billing vendor for several depts) may also have consolidated rate data.",
                         style={"color": C_MUTED, "fontSize": "11px", "fontFamily": FONT_STACK}),
                 ], style={"marginTop": "12px", "padding": "8px 12px",
                           "backgroundColor": "#2A2000", "borderRadius": "6px",
@@ -2823,8 +2879,7 @@ def render_tab(tab):
                         "Ixonia IGA found ($49,169/yr to Town of Watertown; extension to 2027 unconfirmed). "
                         "Fort Atkinson contracts EXPIRED Dec 2025 (no auto-renew; active renegotiation). "
                         "Waterloo likely auto-renewed 2026 at $26/capita. "
-                        "Billing rates: 11 of 14 depts unpublished — not available via web search; "
-                        "recommend direct request at Working Group meeting or batch Open Records.",
+                        "Billing rates: 11 of 14 depts unpublished — not available via web search.",
                         style={"color": C_MUTED, "fontSize": "11px", "fontFamily": FONT_STACK}),
                 ], style={"marginTop": "12px", "padding": "8px 12px",
                           "backgroundColor": "#2A2000", "borderRadius": "6px",
@@ -2869,7 +2924,7 @@ def render_tab(tab):
                 html.P(
                     "Per-capita normalization adjusts for service area size, allowing apples-to-apples "
                     "comparison between small rural departments and larger city departments. "
-                    "Population figures from ACS 2020\u20132024 five-year estimates.",
+                    "Population figures from WI DOA Preliminary 2025 Estimates (Emergency Services Population spreadsheet).",
                     style={"fontSize": "0.8rem", "color": C_MUTED, "margin": "0 0 12px",
                            "lineHeight": "1.55", "fontFamily": FONT_STACK},
                 ),
@@ -2878,64 +2933,11 @@ def render_tab(tab):
                     dcc.Graph(id="util-calls-per-1k",   figure=_get_utilization_figs()[8], style={"flex": "1"}),
                 ], style={"display": "flex", "gap": "16px", "marginBottom": "16px"}),
                 dcc.Graph(id="util-model-bubble", figure=_get_utilization_figs()[4], style={"marginBottom": "16px"}),
-                html.Div([
-                    html.Div([
-                        html.Div("Outlier Scorecard", style={
-                            "fontSize": "0.9rem", "fontWeight": "700",
-                            "color": C_RED, "marginBottom": "6px", "fontFamily": FONT_STACK}),
-                        html.P("Departments flagged on 2 or more metrics that fall in the "
-                               "worst quartile (75th percentile for cost/tax, 25th for "
-                               "volume/recovery/staffing). Thresholds are data-driven "
-                               "and adapt to the county distribution.",
-                            style={"fontSize": "0.78rem", "color": C_MUTED,
-                                   "margin": "0 0 10px", "fontFamily": FONT_STACK,
-                                   "lineHeight": "1.5"}),
-                        dash_table.DataTable(
-                            id="util-outlier-table",
-                            data=_get_utilization_figs()[5],
-                            columns=_get_utilization_figs()[6],
-                            sort_action="native",
-                            style_table={"overflowX": "auto", "borderRadius": "8px", "overflow": "hidden"},
-                            style_header={**_DT_STYLE_HEADER, "backgroundColor": C_RED},
-                            style_cell={**_DT_STYLE_CELL, "fontSize": "12px",
-                                        "whiteSpace": "normal", "height": "auto"},
-                            style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE),
-                    ], style={"flex": "1.2"}),
-                    html.Div([
-                        html.Div("How to Read This Table", style={
-                            "fontSize": "0.9rem", "fontWeight": "700", "color": C_PRIMARY,
-                            "marginBottom": "10px", "borderLeft": f"4px solid {C_PRIMARY}",
-                            "paddingLeft": "10px", "fontFamily": FONT_STACK}),
-                        html.Ul([
-                            html.Li([html.B("# Flags: "),
-                                "Count of metrics where the department falls in the worst quartile. "
-                                "More flags = more areas of concern."],
-                                style={"marginBottom": "8px"}),
-                            html.Li([html.B("Why Flagged: "),
-                                "Lists each triggered metric with its threshold. "
-                                "E.g., 'Cost/call > $X (75th pctl)' means the dept's cost per call "
-                                "exceeds 75% of peers in the county."],
-                                style={"marginBottom": "8px"}),
-                            html.Li([html.B("Cost/Call vs Tax/Call: "),
-                                "High cost/call means high total spending per incident. "
-                                "High tax/call means taxpayers bear most of that cost "
-                                "(low billing revenue offset)."],
-                                style={"marginBottom": "8px"}),
-                            html.Li([html.B("Recovery %: "),
-                                "What share of expenses is covered by EMS billing revenue. "
-                                "Low recovery = heavy reliance on tax levy."],
-                                style={"marginBottom": "8px"}),
-                        ], style={"margin": "0", "paddingLeft": "18px", "lineHeight": "1.6",
-                                  "fontSize": "0.82rem", "color": C_TEXT, "fontFamily": FONT_STACK}),
-                    ], style={"flex": "1.6", "paddingLeft": "20px",
-                              "borderLeft": f"1px solid {C_BORDER}"}),
-                ], style={"display": "flex", "gap": "20px", "alignItems": "flex-start"}),
                 _source_citation(
                     "2024 NFIRS — 14 department Excel files (call volumes)",
                     "FY2025 municipal budget documents (financials & staffing)",
                     "utilization_analysis.md (derived metrics & outlier methodology)",
-                    ("data.census.gov \u2014 ACS 2020\u20132024 5-yr estimates (service area populations)", "https://data.census.gov"),
-                    ("WI DOA 2025 Municipal Estimates (population cross-check)", "https://doa.wi.gov/DIR/Final_Ests_Muni_2025.xlsx"),
+                    ("WI DOA 2025 Preliminary Municipal Estimates (service area populations)", "https://doa.wi.gov/DIR/Final_Ests_Muni_2025.xlsx"),
                     ("Northwestern EMS \u2014 WI avg EMS user fee $36/capita & 254 transports/1K", "https://northwesternems.org/ems-in-wisconsin"),
                 ),
             ], style=CARD),
@@ -2958,7 +2960,7 @@ def render_tab(tab):
                              C_YELLOW),
                     kpi_card("County Amb / 10K Pop",
                              _get_asset_figs()[8]["county_amb_per_10k"],
-                             "Jefferson Co. (86,245 residents)",
+                             f"Jefferson Co. ({_BENCH['jeff_county_pop']:,} residents)",
                              C_GREEN),
                 ], style={"display": "flex", "gap": "14px", "flexWrap": "wrap", "marginBottom": "20px"}),
                 html.Div([
@@ -2969,10 +2971,7 @@ def render_tab(tab):
                               config={"displayModeBar": False, "responsive": True},
                               style={"flex": "1 1 0", "minWidth": 0}),
                 ], style={"display": "flex", "gap": "16px", "marginBottom": "16px"}),
-                html.Div([
-                    dcc.Graph(id="asset-ambulance-bar", figure=_get_asset_figs()[0], style={"flex": "1"}),
-                    dcc.Graph(id="asset-fleet-stacked", figure=_get_asset_figs()[1], style={"flex": "1"}),
-                ], style={"display": "flex", "gap": "16px", "marginBottom": "16px"}),
+                dcc.Graph(id="asset-ambulance-bar", figure=_get_asset_figs()[0], style={"marginBottom": "16px"}),
                 dcc.Graph(id="asset-age-scatter", figure=_get_asset_figs()[2], style={"marginBottom": "16px"}),
                 dcc.Graph(id="asset-personnel-bar", figure=_get_asset_figs()[3], style={"marginBottom": "16px"}),
                 _sub_header("Full Apparatus Inventory Table"),
@@ -3003,9 +3002,170 @@ def render_tab(tab):
                 _source_citation(
                     "MABAS_Assets/*.xlsx — 14 MABAS Division 118 FD Resource Lists (apparatus inventories)",
                     "2024 NFIRS call data (EMS call volumes for utilization metrics)",
-                    ("Census ACS 2020–2024 — service area populations", "https://data.census.gov"),
-                    ("WI DOA 2025 Municipal Estimates", "https://doa.wi.gov/DIR/Final_Ests_Muni_2025.xlsx"),
+                    ("WI DOA 2025 Preliminary Estimates — service area populations", "Emergency Services Population - Jefferson County.xlsx"),
                     "Ambulance end-of-life standard: 15-year / 250,000 mi (ASCO/NHTSA industry guideline)",
+                ),
+            ], style=CARD),
+            # ── NEW: Actual Billing Collections (Chief Association Data) ──────
+            html.Div([
+                _section_header("Actual Billing Collections — Chief Association Agency Data"),
+                html.P(
+                    "Net collections reported by 9 of 12 EMS agencies through the Jefferson County "
+                    "Chief Association. These are actual amounts collected by billing vendors, not budget "
+                    "estimates. Missing: Cambridge, Western Lakes, Whitewater.",
+                    style={"fontSize": "0.82rem", "color": C_MUTED, "margin": "0 0 14px",
+                           "lineHeight": "1.55", "fontFamily": FONT_STACK}),
+                dcc.Graph(id="billing-collections-bar",
+                    figure=_get_billing_collections_fig(), config={"displayModeBar": False}),
+                _sub_header("Year-over-Year Change — All 9 Agencies Grew Revenue"),
+                dcc.Graph(id="billing-change-bar",
+                    figure=_get_billing_change_fig(), config={"displayModeBar": False}),
+                _sub_header("Collections Detail Table"),
+                dash_table.DataTable(
+                    id="billing-collections-table",
+                    columns=[
+                        {"name": "Agency",           "id": "Agency"},
+                        {"name": "2024 Collections", "id": "2024"},
+                        {"name": "2025 Collections", "id": "2025"},
+                        {"name": "Change",           "id": "Change"},
+                        {"name": "% Change",         "id": "Pct"},
+                    ],
+                    data=[{
+                        "Agency": r["Agency"],
+                        "2024": f"${r['Collections_2024']:,.2f}",
+                        "2025": f"${r['Collections_2025']:,.2f}",
+                        "Change": f"+${r['Change']:,.2f}" if r["Change"] > 0 else f"${r['Change']:,.2f}",
+                        "Pct": f"+{r['Pct_Change']:.1f}%" if r["Pct_Change"] > 0 else f"{r['Pct_Change']:.1f}%",
+                    } for _, r in BILLING_COLLECTIONS.iterrows()] + [{
+                        "Agency": "TOTAL",
+                        "2024": f"${BILLING_COLLECTIONS['Collections_2024'].sum():,.2f}",
+                        "2025": f"${BILLING_COLLECTIONS['Collections_2025'].sum():,.2f}",
+                        "Change": f"+${BILLING_COLLECTIONS['Change'].sum():,.2f}",
+                        "Pct": f"+{100*BILLING_COLLECTIONS['Change'].sum()/BILLING_COLLECTIONS['Collections_2024'].sum():.1f}%",
+                    }],
+                    sort_action="native",
+                    style_table={"overflowX": "auto", "borderRadius": "8px", "overflow": "hidden"},
+                    style_header=_DT_STYLE_HEADER,
+                    style_cell={**_DT_STYLE_CELL, "fontSize": "12px"},
+                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE + [
+                        {"if": {"filter_query": '{Agency} = "TOTAL"'},
+                         "fontWeight": "bold", "backgroundColor": "#2E3238"},
+                    ],
+                    style_cell_conditional=[
+                        {"if": {"column_id": c}, "textAlign": "right"}
+                        for c in ["2024", "2025", "Change", "Pct"]
+                    ],
+                ),
+                _source_citation(
+                    "Jefferson County Chief Association Agency Data 2025.xlsx (new3.31.26/)",
+                    "Data reflects actual net collections from EMS billing vendors (EMS|MC and others)",
+                ),
+            ], style=CARD),
+            # ── NEW: EMS Service Area Population (WI DOA 2025) ───────────────
+            html.Div([
+                _section_header("EMS Service Area Population — WI DOA 2025 Preliminary Estimates"),
+                html.P(
+                    "Population assigned by EMS responding unit coverage area. Each municipality's "
+                    "population is allocated to its EMS provider based on coverage ratios from the "
+                    "WI Department of Administration. County total: 86,855.",
+                    style={"fontSize": "0.82rem", "color": C_MUTED, "margin": "0 0 14px",
+                           "lineHeight": "1.55", "fontFamily": FONT_STACK}),
+                dash_table.DataTable(
+                    id="pop-by-provider-table",
+                    columns=_get_population_table()[1],
+                    data=_get_population_table()[0],
+                    sort_action="native",
+                    style_table={"overflowX": "auto", "borderRadius": "8px", "overflow": "hidden"},
+                    style_header=_DT_STYLE_HEADER,
+                    style_cell={**_DT_STYLE_CELL, "fontSize": "12px"},
+                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE + [
+                        {"if": {"filter_query": '{Department} = "COUNTY TOTAL"'},
+                         "fontWeight": "bold", "backgroundColor": "#2E3238"},
+                    ],
+                ),
+                _source_citation(
+                    "Emergency Services Population - Jefferson County.xlsx (new3.31.26/)",
+                    "WI DOA Preliminary 2025 Estimates — Sorted by Provider sheet",
+                ),
+            ], style=CARD),
+            # ── NEW: Mill Rate Levy Projections ──────────────────────────────
+            html.Div([
+                _section_header("Hypothetical County EMS Levy Projections — By Mill Rate"),
+                html.P(
+                    "What a county-wide EMS levy would raise at different mill rates, distributed "
+                    "proportionally by population across the 12 EMS service providers. These are "
+                    "hypothetical projections — no levy is currently in place.",
+                    style={"fontSize": "0.82rem", "color": C_MUTED, "margin": "0 0 14px",
+                           "lineHeight": "1.55", "fontFamily": FONT_STACK}),
+                dcc.Graph(id="levy-projection-chart",
+                    figure=_get_levy_projection_figs()[0], config={"displayModeBar": False}),
+                _sub_header("Full Mill Rate Projection Table"),
+                dash_table.DataTable(
+                    id="levy-projection-table",
+                    columns=_get_levy_projection_figs()[2],
+                    data=_get_levy_projection_figs()[1],
+                    style_table={"overflowX": "auto", "borderRadius": "8px", "overflow": "hidden"},
+                    style_header=_DT_STYLE_HEADER,
+                    style_cell={**_DT_STYLE_CELL, "fontSize": "12px", "textAlign": "right"},
+                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE + [
+                        {"if": {"filter_query": '{Provider} = "COUNTY TOTAL"'},
+                         "fontWeight": "bold", "backgroundColor": "#2E3238"},
+                    ],
+                    style_cell_conditional=[
+                        {"if": {"column_id": "Provider"}, "textAlign": "left", "fontWeight": "600"},
+                    ],
+                ),
+                _source_citation(
+                    "Emergency Services Population - Jefferson County.xlsx (new3.31.26/)",
+                    "Payment by Service Provider sheet — WI DOA 2025 Preliminary Estimates",
+                ),
+            ], style=CARD),
+            # ── NEW: Provider-Level Call Data Inventory ───────────────────────
+            html.Div([
+                _section_header("Provider-Level Call Data Inventory — CY2024"),
+                html.P(
+                    "6 departments provided incident-level EMS data directly (via Chief Association). "
+                    "This supplements the NFIRS data with richer detail including exact dispatch/arrival "
+                    "times, transport dispositions, and care levels.",
+                    style={"fontSize": "0.82rem", "color": C_MUTED, "margin": "0 0 14px",
+                           "lineHeight": "1.55", "fontFamily": FONT_STACK}),
+                dash_table.DataTable(
+                    id="provider-call-summary-table",
+                    columns=[
+                        {"name": "Department",  "id": "Department"},
+                        {"name": "Records",     "id": "Records"},
+                        {"name": "Care Level",  "id": "Care_Level"},
+                        {"name": "Has RT Data", "id": "Has_RT"},
+                        {"name": "Data Fields", "id": "Data_Fields"},
+                        {"name": "Source File", "id": "Source_File"},
+                    ],
+                    data=PROVIDER_CALL_SUMMARY.to_dict("records"),
+                    style_table={"overflowX": "auto", "borderRadius": "8px", "overflow": "hidden"},
+                    style_header=_DT_STYLE_HEADER,
+                    style_cell={**_DT_STYLE_CELL, "fontSize": "12px",
+                                "whiteSpace": "normal", "height": "auto", "maxWidth": "250px"},
+                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE + [
+                        {"if": {"filter_query": '{Has_RT} = "Yes"', "column_id": "Has_RT"},
+                         "color": C_GREEN, "fontWeight": "bold"},
+                        {"if": {"filter_query": '{Has_RT} = "No"', "column_id": "Has_RT"},
+                         "color": C_RED},
+                    ],
+                ),
+                html.Div([
+                    html.Span("Coverage note: ", style={
+                        "fontWeight": "700", "color": C_YELLOW, "fontSize": "11px",
+                        "fontFamily": FONT_STACK}),
+                    html.Span(
+                        "6 of 12 EMS providers submitted data. Missing: Cambridge, Palmyra, "
+                        "Watertown, Western Lakes, Ixonia, and full Whitewater (only Jeff Co contracts provided). "
+                        "4 of 6 providers include response time data suitable for drill-down analysis.",
+                        style={"color": C_MUTED, "fontSize": "11px", "fontFamily": FONT_STACK}),
+                ], style={"marginTop": "12px", "padding": "8px 12px",
+                          "backgroundColor": "#2A2000", "borderRadius": "6px",
+                          "border": f"1px solid {C_YELLOW}33"}),
+                _source_citation(
+                    "Data from Providers-20260331T151417Z-1-001.zip (new3.31.26/)",
+                    "6 individual department data files — CY2024 incident-level records",
                 ),
             ], style=CARD),
         ])
@@ -3175,61 +3335,7 @@ def render_tab(tab):
                 ),
             ], style=CARD),
             html.Div([
-                html.Div([
-                    _section_header("Panel 3B: Agencies per 10,000 Population"),
-                    dcc.Graph(id="cc-agencies-bar", figure=_get_fig_cc_agencies()),
-                    html.P(
-                        "Lower values = fewer, larger departments. "
-                        "Bayfield ratio (5.70) reflects very low population density (~11/sq mi), "
-                        "not structural fragmentation comparable to Jefferson's. "
-                        "Jefferson leads confirmed-data peers at 1.65 agencies per 10K.",
-                        style={"fontSize": "0.75rem", "color": C_MUTED, "margin": "12px 0 0",
-                               "lineHeight": "1.55", "fontFamily": FONT_STACK}),
-                    _source_citation(
-                        "Jefferson, Bayfield, Walworth: confirmed from primary sources",
-                        "Portage: estimated (~9 agencies)",
-                        "Dodge, Rock, Washington: not found (WI DHS EMS Service Map needed)",
-                    ),
-                ], style={**CARD, "flex": "1", "minWidth": "0"}),
-                html.Div([
-                    _section_header("Panel 3D: Governance Feature Matrix"),
-                    html.P(
-                        "Yes/No/Unknown grid for key governance features. "
-                        "Jefferson row bold-highlighted. 'Unknown' = data not found, not confirmed absent.",
-                        style={"fontSize": "0.8rem", "color": C_MUTED, "margin": "0 0 12px",
-                               "lineHeight": "1.55", "fontFamily": FONT_STACK}),
-                    dash_table.DataTable(
-                        id="cc-governance-table",
-                        columns=[{"name": c, "id": c} for c in _df_cc_governance.columns],
-                        data=_df_cc_governance.to_dict("records"),
-                        style_table={"overflowX": "auto", "borderRadius": "8px",
-                                     "overflow": "hidden"},
-                        style_header=_DT_STYLE_HEADER,
-                        style_cell={**_DT_STYLE_CELL, "whiteSpace": "normal",
-                                    "height": "auto", "fontSize": "12px", "minWidth": "65px"},
-                        style_cell_conditional=[
-                            {"if": {"column_id": "County"}, "fontWeight": "600",
-                             "minWidth": "75px"},
-                            {"if": {"column_id": "Confidence"}, "textAlign": "center",
-                             "minWidth": "70px", "fontSize": "11px"},
-                        ],
-                        style_data_conditional=_CC_GOVERNANCE_COND,
-                    ),
-                    html.P(
-                        "Green = Yes. Light red = No. Yellow = Unknown/Partial/Emerging. "
-                        "All 'Unknown' cells reflect data not found as of March 2, 2026.",
-                        style={"fontSize": "0.75rem", "color": C_MUTED, "margin": "12px 0 0",
-                               "lineHeight": "1.55", "fontFamily": FONT_STACK}),
-                    _source_citation(
-                        "Jefferson: contract_analysis.md + EMS Working Group records (confirmed)",
-                        "Bayfield: Bayfield Co. 2025 budget (confirmed)",
-                        "Walworth: WPF 2025 study; Washington: West Bend MOU (confirmed)",
-                        "Dodge, Rock: secondary research only (estimated)",
-                    ),
-                ], style={**CARD, "flex": "1", "minWidth": "0"}),
-            ], style={"display": "flex", "gap": "16px", "alignItems": "flex-start"}),
-            html.Div([
-                _section_header("Panel 3C: Revenue Recovery Rate -- Jefferson County + Portage Benchmark"),
+                _section_header("Revenue Recovery Rate — Jefferson County + Portage Benchmark"),
                 html.P(
                     "All 10 Jefferson County departments with known recovery rates plus "
                     "Portage County benchmarks (current ~35% and 10-year-ago ~49%). "
@@ -3253,7 +3359,7 @@ def render_tab(tab):
 
             # ── Section 19b: Cross-County Asset Comparison ─────────────────
             html.Div([
-                _section_header("Panel 3E: Cross-County Asset & Fleet Comparison"),
+                _section_header("Cross-County Asset & Fleet Comparison"),
                 html.P(
                     "Jefferson County fleet data from MABAS Division 118 filings (confirmed). "
                     "Peer county fleet data not available from public sources — "
@@ -3275,10 +3381,7 @@ def render_tab(tab):
                              "Jefferson County (84,700 pop)",
                              C_PRIMARY),
                 ], style={"display": "flex", "gap": "14px", "marginBottom": "20px"}),
-                html.Div([
-                    dcc.Graph(id="cc-asset-ambulance-dist", figure=_get_fig_cc_assets()[0], style={"flex": "1"}),
-                    dcc.Graph(id="cc-asset-fleet-donut", figure=_get_fig_cc_assets()[1], style={"flex": "1"}),
-                ], style={"display": "flex", "gap": "16px", "marginBottom": "16px"}),
+                dcc.Graph(id="cc-asset-ambulance-dist", figure=_get_fig_cc_assets()[0], style={"marginBottom": "16px"}),
                 _sub_header("Peer County Fleet Data Availability"),
                 dash_table.DataTable(
                     id="cc-asset-table",
@@ -3326,16 +3429,14 @@ def render_tab(tab):
         return html.Div([
             # ── CARD 1: KPI Overview ──────────────────────────────────────
             html.Div([
-                _section_header("EMS Contract & Legal Landscape"),
+                _section_header("EMS Contract & Service Area Overview"),
                 html.Div([
-                    kpi_card("Provider Networks", _ck["providers"],
-                             "independent EMS providers", C_PRIMARY),
+                    kpi_card("EMS Providers", _ck["providers"],
+                             "independent responding units", C_PRIMARY),
+                    kpi_card("County Population", "86,855",
+                             "WI DOA 2025 preliminary estimate", C_GREEN),
                     kpi_card("Active Contracts", _ck["active"],
                              "inter-governmental agreements", C_GREEN),
-                    kpi_card("Expired", _ck["expired"],
-                             "as of Mar 2026", C_RED),
-                    kpi_card("Auto-Renewed", _ck["auto_renewed"],
-                             "120-day opt-out windows", C_YELLOW),
                     kpi_card("Per-Capita Range",
                              f"{_ck['rate_min']} – {_ck['rate_max']}",
                              "latest contract rates", C_PRIMARY),
@@ -3343,36 +3444,50 @@ def render_tab(tab):
                           "flexWrap": "wrap", "marginBottom": "16px"}),
                 _source_citation(
                     "contract_analysis.md — all 17 IGAs reviewed",
-                    "EMS Working Group meeting records",
+                    "Emergency Services Population - Jefferson County.xlsx (WI DOA 2025)",
                 ),
             ], style=CARD),
 
-            # ── CARD 2: Key Legal Findings ────────────────────────────────
+            # ── CARD 2: Service Area Population ──────────────────────────
             html.Div([
-                _section_header("Key Legal & Contractual Findings"),
-                html.Div([
-                    _legal_finding_card(
-                        "Jefferson City Exclusivity Clause",
-                        "Section 1(b) prohibits transitions before Jan 1, 2028 "
-                        "without penalty. Locks 5 townships into current provider.",
-                        "Blocking", C_RED),
-                    _legal_finding_card(
-                        "Fort Atkinson County-Wide Clause",
-                        "Section 6: contracts reopen if county adopts county-wide "
-                        "EMS. Both FA contracts expired Dec 2025 — primary legal "
-                        "entry point for restructuring.",
-                        "Opportunity", C_GREEN),
-                    _legal_finding_card(
-                        "No Performance Standards",
-                        "All 17 contracts are subsidy-only — no response time, "
-                        "coverage, or staffing requirements. Favorable for "
-                        "incremental transition.",
-                        "Systemic", C_YELLOW),
-                ], style={"display": "flex", "gap": "14px",
-                          "flexWrap": "wrap", "marginBottom": "16px"}),
+                _section_header("EMS Service Area Population by Provider"),
+                html.P("Each EMS provider covers a defined set of municipalities. "
+                       "Several towns are split between 2-3 providers. Population "
+                       "figures are WI DOA Preliminary 2025 Estimates, apportioned "
+                       "to the responding unit serving each area.",
+                    style={"fontSize": "0.8rem", "color": C_MUTED, "margin": "0 0 16px",
+                           "lineHeight": "1.55", "fontFamily": FONT_STACK}),
+                dcc.Graph(id="svc-area-pop-bar", figure=_get_fig_svc_area_pop()),
+                dash_table.DataTable(
+                    id="svc-area-pop-table",
+                    columns=[
+                        {"name": "EMS Provider",       "id": "Provider"},
+                        {"name": "Municipalities Served", "id": "Municipalities"},
+                        {"name": "Service Area Pop.",  "id": "Population"},
+                        {"name": "% of County",        "id": "Pct_County"},
+                    ],
+                    data=_SVC_AREA_POP_TABLE,
+                    sort_action="native",
+                    style_table={"overflowX": "auto", "borderRadius": "8px",
+                                 "overflow": "hidden"},
+                    style_header=_DT_STYLE_HEADER,
+                    style_cell={**_DT_STYLE_CELL, "fontSize": "12px",
+                                "whiteSpace": "normal", "height": "auto"},
+                    style_cell_conditional=[
+                        {"if": {"column_id": "Provider"}, "fontWeight": "600",
+                         "textAlign": "left", "width": "130px"},
+                        {"if": {"column_id": "Municipalities"}, "textAlign": "left",
+                         "width": "350px"},
+                        {"if": {"column_id": "Population"}, "textAlign": "center",
+                         "width": "100px"},
+                        {"if": {"column_id": "Pct_County"}, "textAlign": "center",
+                         "width": "90px"},
+                    ],
+                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE,
+                ),
                 _source_citation(
-                    "contract_analysis.md — all 17 IGAs reviewed",
-                    "EMS Working Group meeting records (contract status updates)",
+                    "Emergency Services Population - Jefferson County.xlsx (new3.31.26/)",
+                    "WI DOA Preliminary 2025 Municipal Estimates — Sorted by Provider sheet",
                 ),
             ], style=CARD),
 
@@ -3390,107 +3505,10 @@ def render_tab(tab):
                 ),
             ], style=CARD),
 
-            # ── CARD 4: Levy Framework & Eligibility ──────────────────────
-            html.Div([
-                _section_header("EMS Levy Framework & Eligibility"),
-                html.P("Two independent statutory pathways exist for EMS levy "
-                       "relief outside the normal levy limit. Jefferson County "
-                       "qualifies for both.",
-                    style={"fontSize": "0.8rem", "color": C_TEXT, "lineHeight": "1.6",
-                           "background": "#2E2A1E", "border": f"1px solid {C_PRIMARY}",
-                           "borderLeft": f"4px solid {C_PRIMARY}", "borderRadius": "6px",
-                           "padding": "10px 14px", "marginBottom": "16px",
-                           "fontFamily": FONT_STACK}),
-                html.Div([
-                    kpi_card("County Levy Path", "66.0602(3)(e)6",
-                             "Lafayette Co. precedent", C_GREEN),
-                    kpi_card("Regional Exemption", "AB 197",
-                             "570 sq mi, 12+ munis (qualifies)", C_GREEN),
-                ], style={"display": "flex", "gap": "12px",
-                          "flexWrap": "wrap", "marginBottom": "16px"}),
-                _sub_header("Municipality-Level Levy Eligibility"),
-                dash_table.DataTable(
-                    id="sec16-levy-elig-table",
-                    columns=[{"name": c, "id": c} for c in _df_levy_elig.columns],
-                    data=_df_levy_elig.to_dict("records"),
-                    style_table={"overflowX": "auto", "borderRadius": "8px",
-                                 "overflow": "hidden", "marginBottom": "16px"},
-                    style_header=_DT_STYLE_HEADER,
-                    style_cell={**_DT_STYLE_CELL, "whiteSpace": "normal",
-                                "height": "auto"},
-                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE + [
-                        {"if": {"filter_query": '{Status} contains "Eligible"',
-                                "column_id": "Status"},
-                         "color": C_GREEN, "fontWeight": "600"},
-                        {"if": {"filter_query": '{Status} contains "Locked"',
-                                "column_id": "Status"},
-                         "color": C_RED, "fontWeight": "600"},
-                        {"if": {"filter_query": '{Status} contains "Ineligible"',
-                                "column_id": "Status"},
-                         "color": C_YELLOW, "fontWeight": "600"},
-                    ]),
-                _source_citation(
-                    "savings_model.md — Section 1 (levy framework analysis)",
-                    "Lafayette County Resolution 26-23 (precedent)",
-                    "Wis. Stat. 66.0602(3) + 66.0301 (statutory authority)",
-                ),
-            ], style=CARD),
-
-            # ── CARD 5: Contract Network Detail ───────────────────────────
-            html.Div([
-                _section_header("Contract Network Detail"),
-                _sub_header("Provider Network Summary"),
-                dash_table.DataTable(
-                    id="sec16a-contract-table",
-                    columns=[{"name": c, "id": c}
-                             for c in _df_contract_network.columns],
-                    data=_df_contract_network.to_dict("records"),
-                    sort_action="native",
-                    style_table={"overflowX": "auto", "borderRadius": "8px",
-                                 "overflow": "hidden", "marginBottom": "20px"},
-                    style_header=_DT_STYLE_HEADER,
-                    style_cell={**_DT_STYLE_CELL, "whiteSpace": "normal",
-                                "height": "auto"},
-                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE + [
-                        {"if": {"filter_query": '{Status} contains "EXPIRED"',
-                                "column_id": "Status"},
-                         "color": C_RED, "fontWeight": "600"},
-                        {"if": {"filter_query": '{Status} contains "Active"',
-                                "column_id": "Status"},
-                         "color": C_GREEN, "fontWeight": "600"},
-                        {"if": {"filter_query": '{Status} contains "auto-renew"',
-                                "column_id": "Status"},
-                         "color": C_YELLOW, "fontWeight": "600"},
-                    ]),
-                _sub_header("Operating Model by Municipality"),
-                dash_table.DataTable(
-                    id="sec16b-self-contract-table",
-                    columns=[{"name": c, "id": c}
-                             for c in _df_self_vs_contract.columns],
-                    data=_df_self_vs_contract.to_dict("records"),
-                    sort_action="native",
-                    style_table={"overflowX": "auto", "borderRadius": "8px",
-                                 "overflow": "hidden", "marginBottom": "16px"},
-                    style_header=_DT_STYLE_HEADER,
-                    style_cell={**_DT_STYLE_CELL, "whiteSpace": "normal",
-                                "height": "auto"},
-                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE + [
-                        {"if": {"filter_query": '{EMS Model} contains "Collapsed"',
-                                "column_id": "EMS Model"},
-                         "color": C_RED, "fontWeight": "600"},
-                        {"if": {"filter_query": '{Self-Operated} contains "Formerly"',
-                                "column_id": "Self-Operated"},
-                         "color": C_YELLOW, "fontWeight": "600"},
-                        {"if": {"filter_query": '{Self-Operated} contains "Partial"',
-                                "column_id": "Self-Operated"},
-                         "color": C_YELLOW, "fontWeight": "600"},
-                    ]),
-                _source_citation(
-                    "contract_analysis.md — all 17 IGAs reviewed",
-                ),
-            ], style=CARD),
         ])
 
+    # Recommendations tab — hidden from UI but code preserved for future use.
+    # To re-enable: add dcc.Tab(label="Recommendations", value="tab-recommend", ...) to the tab bar above.
     elif tab == "tab-recommend":
         return html.Div([
             html.Div([
@@ -3502,28 +3520,6 @@ def render_tab(tab):
                            "background": "#2E1E1E", "border": f"1px solid {C_ORANGE}",
                            "borderLeft": f"4px solid {C_ORANGE}", "borderRadius": "6px",
                            "padding": "10px 14px", "marginBottom": "20px", "fontFamily": FONT_STACK}),
-                _sub_header("Cost Per Call vs. Department Volume"),
-                dcc.Graph(id="sec15a-cost-threshold", figure=_get_fig_cost_threshold(),
-                    style={"marginBottom": "20px"}),
-                _sub_header("Estimated Annual Cost of Identified Inefficiencies"),
-                dcc.Graph(id="sec15b-savings-waterfall", figure=_get_fig_savings(),
-                    style={"marginBottom": "20px"}),
-                _sub_header("WI Levy Exception Eligibility"),
-                dash_table.DataTable(
-                    id="sec15c-levy-table",
-                    columns=[{"name": c, "id": c} for c in _df_levy_elig.columns],
-                    data=_df_levy_elig.to_dict("records"),
-                    style_table={"overflowX": "auto", "borderRadius": "8px",
-                                 "overflow": "hidden", "marginBottom": "16px"},
-                    style_header=_DT_STYLE_HEADER,
-                    style_cell={**_DT_STYLE_CELL, "whiteSpace": "normal", "height": "auto"},
-                    style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE),
-                html.P("Conservative estimate (excl. Jefferson): ~$1.02M in annual costs attributable to "
-                    "identified structural inefficiencies — approximately 7.5% of the county's $13.6M total EMS budget.",
-                    style={"fontSize": "0.8rem", "color": C_TEXT, "lineHeight": "1.6",
-                           "background": "#2E2A1E", "border": f"1px solid {C_PRIMARY}",
-                           "borderLeft": f"4px solid {C_PRIMARY}", "borderRadius": "6px",
-                           "padding": "10px 14px", "margin": "0", "fontFamily": FONT_STACK}),
                 _source_citation(
                     "savings_model.md — Section 3 (5% savings pathway)",
                     "utilization_analysis.md (cost-per-call & outlier analysis)",
@@ -3555,8 +3551,7 @@ def render_tab(tab):
             html.Div([
                 _section_header("Contract Windows & Structural Transition Opportunities"),
                 html.P("Contract expiration analysis identifying when and where structural changes become "
-                    "feasible based on existing IGA terms. These are data-driven observations about "
-                    "the current contract landscape — not a prescribed implementation plan.",
+                    "feasible based on existing IGA terms.",
                     style={"fontSize": "0.8rem", "color": C_TEXT, "lineHeight": "1.6",
                            "background": "#2E2A1E", "border": f"1px solid {C_PRIMARY}",
                            "borderLeft": f"4px solid {C_PRIMARY}", "borderRadius": "6px",
@@ -3583,6 +3578,7 @@ def render_tab(tab):
 
 @app.callback(
     Output("map-markers", "children"),
+    Output("map-ems-choropleth", "hideout"),
     Output("map-geojson", "hideout"),
     Output("map-legend", "children"),
     Output("zoom-badge", "children"),
@@ -3595,7 +3591,7 @@ def render_tab(tab):
 )
 def update_map(metric, selected_depts, viewport, tab, active_layers):
     if tab != "tab-overview":
-        return no_update, no_update, no_update, no_update, no_update
+        return no_update, no_update, no_update, no_update, no_update, no_update
     zoom = (viewport or {}).get("zoom", 10)
     active_layers = active_layers or []
 
@@ -3616,7 +3612,9 @@ def update_map(metric, selected_depts, viewport, tab, active_layers):
     is_rt = "rt" in metric
     is_asset = metric in ("ambulances", "ems_personnel")
     color_map = _compute_color_map(metric)
-    hideout = {"colorMap": color_map}
+    show_muni = "muni" in active_layers
+    ems_hideout = {"colorMap": color_map}
+    muni_hideout = {"showMuniBorders": show_muni}
 
     def _tier_radius(total):
         if not total:
@@ -3829,12 +3827,11 @@ def update_map(metric, selected_depts, viewport, tab, active_layers):
                   style={"fontWeight": "400", "color": "rgba(0,0,0,0.45)", "fontSize": "10px"}),
     ])
 
-    return markers, hideout, legend, badge, zcta_children
+    return markers, ems_hideout, muni_hideout, legend, badge, zcta_children
 
 
 # ── Map overlay layers callback (ZCTA now handled by update_map) ─────────────
 @app.callback(
-    Output("map-layer-ems", "children"),
     Output("map-layer-fire", "children"),
     Output("map-layer-stations", "children"),
     Output("map-layer-helenville", "children"),
@@ -3843,25 +3840,16 @@ def update_map(metric, selected_depts, viewport, tab, active_layers):
 )
 def toggle_map_layers(active_layers, tab):
     if tab != "tab-overview":
-        return no_update, no_update, no_update, no_update
+        return no_update, no_update, no_update
     active = active_layers or []
 
-    # EMS Districts
-    ems_children = []
-    if "ems" in active:
-        ems_children = [
-            dl.GeoJSON(data=geojson_ems_districts,
-                       options=dict(style=_ems_district_style),
-                       hoverStyle={"weight": 3, "fillOpacity": 0.35}),
-        ]
-
-    # Fire Districts
+    # Fire Districts — reference only; boundaries differ from EMS districts
     fire_children = []
     if "fire" in active:
         fire_children = [
             dl.GeoJSON(data=geojson_fire_districts,
                        options=dict(style=_fire_district_style),
-                       hoverStyle={"weight": 3, "fillOpacity": 0.35}),
+                       hoverStyle={"weight": 2, "fillOpacity": 0.25}),
         ]
 
     # Stations (point markers from ArcGIS)
@@ -3892,7 +3880,7 @@ def toggle_map_layers(active_layers, tab):
                        hoverStyle={"weight": 3, "fillOpacity": 0.4}),
         ]
 
-    return ems_children, fire_children, station_children, helen_children
+    return fire_children, station_children, helen_children
 
 
 # ── Zoom-to-fit: auto-adjust map bounds when department filter changes ────────
@@ -3939,31 +3927,31 @@ def update_kpi_row(depts, tab):
         return no_update
     df       = filter_raw(depts)
     rt_f     = filter_rt(depts)
-    ems_f    = df[df["IsEMS"]]
-    ems_rt_f = rt_f[rt_f["IsEMS"]]
 
-    total    = len(df)
-    ems_c    = int(df["IsEMS"].sum())
-    ems_pct  = f"{100*ems_c/total:.1f}%" if total else "N/A"
+    # Authoritative EMS call total for selected departments
+    if depts:
+        auth_total = sum(AUTH_EMS_CALLS.get(d, 0) for d in depts)
+    else:
+        auth_total = _AUTH_COUNTY_TOTAL
+
     avg_rt   = f"{rt_f['RT'].mean():.1f} min" if len(rt_f) else "N/A"
     med_rt   = f"{rt_f['RT'].median():.1f} min" if len(rt_f) else "N/A"
-    n_depts  = df["Department"].nunique()
+    n_depts  = len(depts) if depts else len(AUTH_EMS_CALLS)
     pct_over8 = (
-        f"{100*(ems_rt_f['RT'] > 8).sum()/len(ems_rt_f):.1f}%"
-        if len(ems_rt_f) else "N/A"
+        f"{100*(rt_f['RT'] > 8).sum()/len(rt_f):.1f}%"
+        if len(rt_f) else "N/A"
     )
 
     return [
-        kpi_card("Total Incidents", f"{total:,}",   f"2024 — {n_depts} depts selected"),
-        kpi_card("EMS / Rescue",    f"{ems_c:,}",   f"{ems_pct} of calls", C_RED),
-        kpi_card("Avg Resp. Time",  avg_rt,          "All incidents (0-60 min)"),
-        kpi_card("Median RT",       med_rt,          "County-wide"),
-        kpi_card("Departments",     str(n_depts),    "municipalities selected"),
-        kpi_card("% EMS > 8 min",   pct_over8,       "EMS calls exceeding benchmark", "#A78BFA"),
+        kpi_card("EMS Calls",       f"{auth_total:,}", f"2024 — {n_depts} depts selected"),
+        kpi_card("Avg Resp. Time",  avg_rt,            "EMS incidents (0-60 min)"),
+        kpi_card("Median RT",       med_rt,            "County-wide EMS"),
+        kpi_card("Departments",     str(n_depts),      "EMS-providing communities"),
+        kpi_card("% EMS > 8 min",   pct_over8,         "Calls exceeding NFPA benchmark", "#A78BFA"),
     ]
 
 
-# FIX 2: Call Volume — stacked bar (EMS + Non-EMS) + population-normalized bar + EMS % bar
+# FIX 2: Call Volume — EMS calls bar + population-normalized bar + EMS % bar
 @app.callback(
     Output("vol-bar",      "figure"),
     Output("vol-norm-bar", "figure"),
@@ -3974,50 +3962,54 @@ def update_kpi_row(depts, tab):
 def update_vol(depts, tab):
     if tab != "tab-calls":
         return no_update, no_update, no_update
-    df  = filter_raw(depts)
-    ems = df[df["IsEMS"]]
 
-    cv  = df.groupby("Department").size().reset_index(name="Total")
-    ev  = ems.groupby("Department").size().reset_index(name="EMS")
-    cv  = cv.merge(ev, on="Department", how="left").fillna({"EMS": 0})
-    cv["EMS"]     = cv["EMS"].astype(int)
-    cv["NonEMS"]  = cv["Total"] - cv["EMS"]
-    cv["EMS_Pct"] = (cv["EMS"] / cv["Total"] * 100).round(1)
-    cv = cv.sort_values("Total", ascending=True)
+    # Build call volume table from authoritative EMS counts
+    selected = depts if depts else list(AUTH_EMS_CALLS.keys())
+    cv = pd.DataFrame([
+        {"Department": d, "EMS_Calls": AUTH_EMS_CALLS.get(d, 0)}
+        for d in selected if d in AUTH_EMS_CALLS
+    ])
+    cv = cv.sort_values("EMS_Calls", ascending=True)
 
-    # ── Chart 1: Stacked horizontal bar — EMS (accent) + Non-EMS (orange) ────
+    # ── Chart 1: Horizontal bar — EMS Calls (authoritative) ─────────────────
+    # Add asterisk for departments where Looker Studio data differs
+    cv["Label"] = cv.apply(
+        lambda r: f"{r['EMS_Calls']:,}*" if r["Department"] in CALL_VOLUME_NOTES else f"{r['EMS_Calls']:,}",
+        axis=1)
+    cv["HoverNote"] = cv["Department"].map(
+        lambda d: f"<br><i>* {CALL_VOLUME_NOTES[d]}</i>" if d in CALL_VOLUME_NOTES else "")
+
     fig1 = go.Figure([
         go.Bar(
-            y=cv["Department"], x=cv["EMS"],
-            name="EMS / Rescue", orientation="h",
+            y=cv["Department"], x=cv["EMS_Calls"],
+            name="EMS Calls", orientation="h",
             marker_color=C_PRIMARY,
-            text=cv["EMS"], textposition="inside",
-            textfont=dict(color="white", size=11),
-            hovertemplate="<b>%{y}</b><br>EMS calls: %{x:,}<extra></extra>",
-        ),
-        go.Bar(
-            y=cv["Department"], x=cv["NonEMS"],
-            name="Non-EMS", orientation="h",
-            marker_color=C_ORANGE,
-            text=cv["NonEMS"], textposition="inside",
-            textfont=dict(color="white", size=11),
-            hovertemplate="<b>%{y}</b><br>Non-EMS calls: %{x:,}<extra></extra>",
+            text=cv["Label"], textposition="outside",
+            textfont=dict(color=C_TEXT, size=11),
+            customdata=cv["HoverNote"],
+            hovertemplate="<b>%{y}</b><br>EMS calls: %{x:,}%{customdata}<extra></extra>",
         ),
     ])
     fig1.update_layout(
-        barmode="stack",
-        title="2024 Call Volume by Department — NFIRS Data",
-        xaxis_title="Number of Incidents",
+        title="2024 EMS Call Volume by Department",
+        xaxis_title="Number of EMS Calls",
     )
-    _apply_chart_style(fig1, height=560, legend_below=False)
-    # Horizontal bar: y-axis labels are dept names — left margin for readability
-    # Taller height gives each of the 15 departments ~37px bar space (was ~29px at 440)
+    # Footnote for asterisks
+    has_notes = cv["Department"].isin(CALL_VOLUME_NOTES).any()
+    if has_notes:
+        fig1.add_annotation(
+            text="* Looker Studio data differs from authoritative count — hover for details",
+            xref="paper", yref="paper", x=0, y=-0.08,
+            showarrow=False, font=dict(size=10, color=C_MUTED),
+            xanchor="left",
+        )
+    _apply_chart_style(fig1, height=500, legend_below=False)
     fig1.update_layout(
-        margin=dict(l=140, r=80, t=55, b=30),
+        margin=dict(l=140, r=80, t=55, b=45),
         yaxis=dict(tickfont=dict(size=12, color=C_TEXT)),
     )
 
-    # ── Chart 2: Population-normalized — Calls per 1,000 Population ──────────
+    # ── Chart 2: Population-normalized — EMS Calls per 1,000 Population ──────
     # Join population data and service level from module-level dicts
     cv["Population"]    = cv["Department"].map(SERVICE_AREA_POP)
     cv["Service_Level"] = cv["Department"].map(
@@ -4027,7 +4019,7 @@ def update_vol(depts, tab):
     has_pop = cv["Population"].notna()
     cv["Calls_per_1K"] = None
     cv.loc[has_pop, "Calls_per_1K"] = (
-        cv.loc[has_pop, "Total"] / cv.loc[has_pop, "Population"] * 1000
+        cv.loc[has_pop, "EMS_Calls"] / cv.loc[has_pop, "Population"] * 1000
     ).round(1)
 
     # Sort ascending by calls/1K (put N/A depts at top where value is None)
@@ -4042,7 +4034,7 @@ def update_vol(depts, tab):
     hover_texts = []
     for _, row in cv_norm.iterrows():
         dept  = row["Department"]
-        total = int(row["Total"])
+        ems_c = int(row["EMS_Calls"])
         lvl   = row["Service_Level"]
         pop   = row["Population"]
         if pd.notna(pop):
@@ -4050,7 +4042,7 @@ def update_vol(depts, tab):
             c1k      = row["Calls_per_1K"]
             hover_texts.append(
                 f"<b>{dept}</b><br>"
-                f"Calls: {total:,}<br>"
+                f"EMS Calls: {ems_c:,}<br>"
                 f"Population: {pop_int:,}<br>"
                 f"Calls/1K pop: <b>{c1k:.1f}</b><br>"
                 f"Service level: {lvl}"
@@ -4058,7 +4050,7 @@ def update_vol(depts, tab):
         else:
             hover_texts.append(
                 f"<b>{dept}</b><br>"
-                f"Calls: {total:,}<br>"
+                f"EMS Calls: {ems_c:,}<br>"
                 f"Population: N/A (no Census estimate)<br>"
                 f"Service level: {lvl}"
             )
@@ -4140,9 +4132,9 @@ def update_vol(depts, tab):
             ]
 
     fig3.update_layout(
-        title="Calls per 1,000 Population — 2024 NFIRS Data<br>"
+        title="EMS Calls per 1,000 Population — 2024<br>"
               "<sup>Linear scale  ·  Color = service level  ·  Dashed = WI avg (254/1K)  ·  "
-              "Western Lakes bar capped — true value ~2,212/1K (full Waukesha Co. district)</sup>",
+              "Western Lakes bar capped — full Waukesha Co. district</sup>",
         yaxis_title="",
     )
     _apply_chart_style(fig3, height=560, legend_below=True, title_has_subtitle=True)
@@ -4179,88 +4171,40 @@ def update_vol(depts, tab):
     fig3.data[0].x = x_vals
     fig3.data[0].text = text_labels
 
-    # ── Chart 3 (was fig2): EMS % horizontal bar ────────────────────────────
-    fig2 = px.bar(
-        cv.sort_values("EMS_Pct", ascending=True),
-        y="Department", x="EMS_Pct", orientation="h",
-        title="EMS % of Total Calls — 2024 NFIRS Data",
-        color="EMS_Pct",
-        color_continuous_scale=[[0, "#2E2A1E"], [0.5, C_PRIMARY], [1, C_YELLOW]],
-        text="EMS_Pct",
+    # ── Chart 3: EMS Calls per Capita (absolute cost context) ───────────────
+    # Since all calls are EMS-only, show cost/call by department as the 3rd panel
+    cv_cost = cv.copy()
+    cv_cost["Total_Expense"] = cv_cost["Department"].map(
+        dict(zip(budget["Municipality"], budget["Total_Expense"]))
     )
-    fig2.update_traces(
-        texttemplate="%{text:.1f}%", textposition="outside",
-        hovertemplate="<b>%{y}</b><br>EMS share: %{x:.1f}%<extra></extra>",
-    )
-    fig2.update_layout(coloraxis_showscale=False)
-    _apply_chart_style(fig2, height=500)
+    cv_cost = cv_cost.dropna(subset=["Total_Expense"])
+    # Exclude Whitewater: $2.7M budget covers full multi-county dept but only 64 calls
+    # are Jefferson Co. contracts — cost/call is misleading without full service area context.
+    cv_cost = cv_cost[cv_cost["Department"] != "Whitewater"]
+    cv_cost["Cost_Per_Call"] = (cv_cost["Total_Expense"] / cv_cost["EMS_Calls"].replace(0, float("nan"))).round(0)
+    cv_cost = cv_cost.dropna(subset=["Cost_Per_Call"]).sort_values("Cost_Per_Call", ascending=True)
+    fig2 = go.Figure(go.Bar(
+        y=cv_cost["Department"], x=cv_cost["Cost_Per_Call"],
+        orientation="h",
+        marker_color=C_PRIMARY,
+        text=cv_cost["Cost_Per_Call"].apply(lambda v: f"${v:,.0f}"),
+        textposition="outside",
+        customdata=cv_cost["EMS_Calls"],
+        hovertemplate="<b>%{y}</b><br>Cost/EMS Call: $%{x:,.0f}<br>EMS Calls: %{customdata:,}<extra></extra>",
+    ))
     fig2.update_layout(
-        margin=dict(l=145, r=80, t=55, b=30),
+        title="Cost per EMS Call — 2024<br><sup>Total Expense ÷ Authoritative EMS Calls · Whitewater excluded (64 Jeff Co. calls vs $2.7M full-dept budget)</sup>",
+        xaxis_title="$ per EMS Call",
+        xaxis_tickprefix="$",
+    )
+    _apply_chart_style(fig2, height=500, title_has_subtitle=True)
+    fig2.update_layout(
+        margin=dict(l=145, r=80, t=70, b=30),
         yaxis=dict(tickfont=dict(size=13, color=C_TEXT)),
     )
     return fig1, fig3, fig2
 
 
-@app.callback(
-    Output("inc-type-bar",    "figure"),
-    Output("ems-subtype-bar", "figure"),
-    Input("dept-filter",      "value"),
-    Input("main-tabs",        "value"),
-)
-def update_inc_type(depts, tab):
-    if tab != "tab-calls":
-        return no_update, no_update
-    df  = filter_raw(depts)
-    inc = df.groupby(["Department","Incident Type Code Category Description"]).size().reset_index(name="Calls")
-    tot = inc.groupby("Department")["Calls"].transform("sum")
-    inc["Pct"] = (inc["Calls"] / tot * 100).round(1)
-    inc["Cat"] = inc["Incident Type Code Category Description"].str.extract(r"^([^(]+)")[0].str.strip()
-
-    fig = px.bar(inc, x="Department", y="Pct", color="Cat", barmode="stack",
-                 title="Incident Type Breakdown (%) — 2024 NFIRS Data",
-                 labels={"Pct":"% of calls","Cat":"Category"},
-                 color_discrete_sequence=[
-                     C_PRIMARY, C_GREEN, "#60A5FA", C_YELLOW, C_ORANGE,
-                     "#A78BFA", "#F472B6", C_MUTED, "#34D399", "#FBBF24",
-                 ])
-    fig.update_traces(
-        hovertemplate="<b>%{x}</b><br>%{fullData.name}: %{y:.1f}%<extra></extra>",
-    )
-    # Apply style first, then override legend — order matters to avoid overwrite
-    _apply_chart_style(fig, height=560, legend_below=True)
-    fig.update_layout(
-        xaxis=dict(tickangle=-35, automargin=True, tickfont=dict(size=12, color=C_TEXT)),
-        margin=dict(l=20, r=20, t=60, b=140),
-        legend=dict(
-            orientation="h",
-            yanchor="top", y=-0.22,
-            xanchor="left", x=0,
-            bgcolor="rgba(0,0,0,0)", bordercolor="rgba(0,0,0,0)",
-            font=dict(size=10, color=C_TEXT),
-            title=dict(text="Category:", font=dict(size=11, color=C_MUTED)),
-        ),
-    )
-
-    # EMS sub-type horizontal bar chart
-    col_type  = ems_types.columns[0]
-    col_count = ems_types.columns[1]
-    fig_ems_sub = px.bar(
-        ems_types.sort_values(col_count, ascending=True),
-        x=col_count, y=col_type, orientation="h",
-        title="EMS Incident Sub-Types — County Wide (2024 NFIRS Data)",
-        color=col_count,
-        color_continuous_scale=[[0, "#2E2A1E"], [0.5, C_PRIMARY], [1, "#F7C143"]],
-    )
-    fig_ems_sub.update_traces(
-        hovertemplate="<b>%{y}</b><br>Incidents: %{x:,}<extra></extra>",
-    )
-    fig_ems_sub.update_layout(coloraxis_showscale=False, xaxis_title="Number of Incidents", yaxis_title="")
-    _apply_chart_style(fig_ems_sub, height=500)
-    fig_ems_sub.update_layout(
-        margin=dict(l=235, r=80, t=60, b=40),
-        yaxis=dict(tickfont=dict(size=12, color=C_TEXT)),
-    )
-    return fig, fig_ems_sub
 
 
 # FIX 5: Response time box plot with N-count annotations
@@ -4827,6 +4771,75 @@ def update_aid(depts, tab):
     )
 
     return fig, fig_r
+
+
+# ── Multi-Provider Coverage callback ─────────────────────────────────────────
+# Provider color palette (consistent across chart)
+_PROVIDER_COLORS = {
+    "Fort Atkinson": "#00838F", "Jefferson": "#F7C143", "Johnson Creek": "#10B981",
+    "Lake Mills": "#60A5FA", "Watertown": "#EF4444", "Ixonia": "#A78BFA",
+    "Western Lakes": "#F472B6", "Edgerton": "#34D399", "Cambridge": "#FB923C",
+    "Whitewater": "#818CF8", "Palmyra": "#FBBF24", "Waterloo": "#2DD4BF",
+}
+
+@app.callback(
+    Output("coverage-overlap-bar", "figure"),
+    Input("dept-filter",           "value"),
+    Input("main-tabs",             "value"),
+)
+def update_coverage(depts, tab):
+    if tab != "tab-calls":
+        return no_update
+
+    selected = set(depts) if depts else set(AUTH_EMS_CALLS.keys())
+
+    # Filter to towns where at least one selected dept is a provider
+    filtered = {}
+    for town, providers in MULTI_PROVIDER_COVERAGE.items():
+        if any(p in selected for p, _ in providers):
+            filtered[town] = providers
+
+    if not filtered:
+        fig = go.Figure()
+        fig.add_annotation(text="No multi-provider towns for selected departments",
+                          xref="paper", yref="paper", x=0.5, y=0.5,
+                          showarrow=False, font=dict(size=13, color=C_MUTED))
+        _apply_chart_style(fig, height=300)
+        return fig
+
+    # Sort by number of providers (desc), then total pop (desc)
+    sorted_towns = sorted(filtered.items(),
+                          key=lambda kv: (len(kv[1]), sum(p for _, p in kv[1])),
+                          reverse=True)
+
+    # Build stacked bar traces — one trace per provider
+    all_providers = sorted({p for _, provs in sorted_towns for p, _ in provs})
+    town_names = [t for t, _ in sorted_towns]
+
+    fig = go.Figure()
+    for provider in all_providers:
+        pops = []
+        for town, provs in sorted_towns:
+            prov_dict = {p: pop for p, pop in provs}
+            pops.append(prov_dict.get(provider, 0))
+        fig.add_trace(go.Bar(
+            y=town_names, x=pops,
+            name=provider, orientation="h",
+            marker_color=_PROVIDER_COLORS.get(provider, C_MUTED),
+            hovertemplate=f"<b>{provider}</b><br>%{{y}}: %{{x:,}} pop served<extra></extra>",
+        ))
+
+    fig.update_layout(
+        title="Multi-Provider Towns — Population Served by Each EMS Provider",
+        xaxis_title="Population Served",
+        barmode="stack",
+    )
+    _apply_chart_style(fig, height=max(350, len(town_names) * 35 + 120), legend_below=True)
+    fig.update_layout(
+        margin=dict(l=160, r=30, t=55, b=80),
+        yaxis=dict(tickfont=dict(size=11, color=C_TEXT), autorange="reversed"),
+    )
+    return fig
 
 
 # Portage charts — static, computed once on first access
@@ -5396,7 +5409,7 @@ def _get_budget_figs():
     ))
     fig_epc.update_layout(
         title="Expense Per Capita by Department<br>"
-              "<sup>FY2025 Budget / Service Area Population (Census ACS 2024) "
+              "<sup>FY2025 Budget / Service Area Population (WI DOA 2025 Preliminary Estimates) "
               "· WI avg EMS user fee = $36/capita shown for reference</sup>",
         yaxis_title="$ per capita",
     )
@@ -5705,7 +5718,7 @@ def _get_als_fig():
 
     rows = []
     for dept, info in ALS_LEVELS.items():
-        n_calls = int(raw[raw["Department"] == dept]["IsEMS"].sum()) if dept in raw["Department"].values else 0
+        n_calls = AUTH_EMS_CALLS.get(dept, 0)
         rows.append({
             "Department": dept,
             "Level":      info["Level"],
@@ -5782,10 +5795,8 @@ def _get_asset_figs():
     """Build all asset comparison charts. Returns (fig_ambulance_bar, fig_fleet_stacked,
     fig_age_scatter, fig_personnel_bar, table_data, table_columns)."""
     ad = ASSET_DATA.copy()
-    # Merge call volumes for cross-referencing
-    cv = raw.groupby("Department").agg(Total=("Department", "size"), EMS=("IsEMS", "sum")).reset_index()
-    cv.columns = ["Municipality", "Total_Calls", "EMS_Calls"]
-    ad = ad.merge(cv, on="Municipality", how="left").fillna({"Total_Calls": 0, "EMS_Calls": 0})
+    # Merge authoritative EMS call volumes for cross-referencing
+    ad["EMS_Calls"] = ad["Municipality"].map(AUTH_EMS_CALLS).fillna(0)
     ad["Total_Apparatus"] = ad["Engines"] + ad["Trucks_Ladders"] + ad["Squads_Rescues"] + ad["Tenders"] + ad["Brush_ATV"] + ad["Boats"] + ad["Ambulances"]
 
     # Only departments with ambulances for ambulance-focused charts
@@ -6034,28 +6045,33 @@ def _get_asset_figs():
 
 # FIX 12: Individual department drill-down callback
 @app.callback(
-    Output("drilldown-kpi-row",  "children"),
-    Output("drilldown-rt-hist",  "figure"),
-    Output("drilldown-hour-bar", "figure"),
-    Output("drilldown-monthly",  "figure"),
-    Input("dept-drilldown",      "value"),
+    Output("drilldown-kpi-row",      "children"),
+    Output("drilldown-als-bls",      "figure"),
+    Output("drilldown-rt-hist",      "figure"),
+    Output("drilldown-hour-bar",     "figure"),
+    Output("drilldown-monthly",      "figure"),
+    Output("drilldown-high-freq",    "children"),
+    Output("drilldown-data-quality", "children"),
+    Input("dept-drilldown",          "value"),
 )
 def update_drilldown(dept):
     df_d  = raw[raw["Department"] == dept]
     rt_d  = rt_clean[rt_clean["Department"] == dept]
     bud   = budget_lookup.get(dept, {})
 
-    total  = len(df_d)
-    ems_c  = int(df_d["IsEMS"].sum())
+    auth_c = AUTH_EMS_CALLS.get(dept, len(df_d))  # Authoritative EMS count
     med_rt = float(rt_d["RT"].median()) if len(rt_d) else None
     p90_rt = float(rt_d["RT"].quantile(0.90)) if len(rt_d) else None
 
+    # Asterisk for call volume discrepancies
+    call_note = CALL_VOLUME_NOTES.get(dept)
+    ems_label = f"{auth_c:,}*" if call_note else f"{auth_c:,}"
+    ems_sub = f"{dept} — 2024 | *{call_note}" if call_note else f"{dept} — 2024"
+
     cards = [
-        kpi_card("Total Calls",    f"{total:,}",                       f"{dept} — 2024 NFIRS Data"),
-        kpi_card("EMS Calls",      f"{ems_c:,}",
-                 f"{100*ems_c/total:.0f}% of calls" if total else "N/A", C_RED),
+        kpi_card("EMS Calls",     ems_label,                             ems_sub),
         kpi_card("Median RT",      f"{med_rt:.1f} min" if med_rt is not None else "N/A",
-                 "response time"),
+                 "EMS response time"),
         kpi_card("P90 RT",         f"{p90_rt:.1f} min" if p90_rt is not None else "N/A",
                  "90th percentile",
                  C_RED if (p90_rt or 0) > 8 else C_GREEN),
@@ -6065,6 +6081,42 @@ def update_drilldown(dept):
                  f"${bud['Total_Expense']:,.0f}" if bud.get("Total_Expense") else "N/A",
                  f"FY{bud.get('FY','?')}"),
     ]
+
+    # ── ALS/BLS donut chart ────────────────────────────────────────────────────
+    pct_data = ALS_BLS_PCTS.get(dept)
+    _als_colors = {
+        "ALS": C_PRIMARY, "BLS": "#10B981", "Critical Care": "#EF4444",
+        "Transport": "#F59E0B", "First Aid": "#60A5FA", "Other": "#6B7280",
+    }
+    if pct_data:
+        labels = list(pct_data.keys())
+        values = list(pct_data.values())
+        fig_als = go.Figure(go.Pie(
+            labels=labels, values=values,
+            hole=0.55,
+            marker_colors=[_als_colors.get(l, "#6B7280") for l in labels],
+            textinfo="label+percent",
+            textfont=dict(size=10, color=C_TEXT),
+            hovertemplate="<b>%{label}</b>: %{percent}<extra></extra>",
+            sort=False,
+        ))
+        svc_level = ALS_LEVELS.get(dept, {}).get("Level", "")
+        fig_als.update_layout(
+            title=dict(text=f"ALS / BLS Split", font=dict(size=13)),
+            annotations=[dict(text=svc_level, x=0.5, y=0.5, font_size=15,
+                             showarrow=False, font_color=C_TEXT)],
+        )
+        _apply_chart_style(fig_als, height=360, legend_below=True)
+        fig_als.update_layout(margin=dict(l=10, r=10, t=45, b=80))
+    else:
+        fig_als = go.Figure()
+        fig_als.add_annotation(
+            text=f"No ALS/BLS breakdown<br>available for {dept}",
+            xref="paper", yref="paper", x=0.5, y=0.5,
+            showarrow=False, font=dict(size=12, color="#6B7280"),
+        )
+        _apply_chart_style(fig_als, height=360)
+        fig_als.update_layout(margin=dict(l=10, r=10, t=45, b=50))
 
     # Response time histogram
     fig_hist = px.histogram(
@@ -6129,65 +6181,152 @@ def update_drilldown(dept):
         ),
     ])
     fig_mo.update_layout(
-        title=f"{dept} — Monthly Calls vs County Average (2024 NFIRS Data)",
-        xaxis_title="Month", yaxis_title="Calls",
+        title=f"{dept} — Monthly EMS Calls vs County Average (2024)",
+        xaxis_title="Month", yaxis_title="EMS Calls",
     )
     _apply_chart_style(fig_mo, height=340, legend_below=False)
     fig_mo.update_layout(margin=dict(l=55, r=30, t=60, b=50))
 
-    return cards, fig_hist, fig_hr, fig_mo
+    # ── High-frequency call locations (table + mini map) ─────────────────────
+    hf = HIGH_FREQ_ADDRESSES.get(dept)
+    if hf:
+        # Build DataTable rows
+        table_data = []
+        for entry in hf:
+            addr, calls, note = entry[0], entry[1], entry[2]
+            pct = round(100 * calls / auth_c, 1) if auth_c else 0
+            table_data.append({"Address": addr, "Calls": calls,
+                               "% of Total": f"{pct}%", "Note": note})
+
+        hf_table = dash_table.DataTable(
+            data=table_data,
+            columns=[
+                {"name": "#", "id": "row_num"},
+                {"name": "Address", "id": "Address"},
+                {"name": "Calls", "id": "Calls", "type": "numeric"},
+                {"name": "% of Total", "id": "% of Total"},
+                {"name": "Note", "id": "Note"},
+            ],
+            # Add row numbers
+            style_cell={"textAlign": "left", "padding": "6px 10px",
+                        "fontFamily": FONT_STACK, "fontSize": "0.82rem",
+                        "backgroundColor": C_CARD, "color": C_TEXT,
+                        "border": f"1px solid {C_BORDER}"},
+            style_header={"fontWeight": "bold", "backgroundColor": "#2A2E34",
+                          "color": C_TEXT, "border": f"1px solid {C_BORDER}"},
+            style_data_conditional=[
+                {"if": {"column_id": "Calls"}, "textAlign": "right", "fontWeight": "bold"},
+                {"if": {"column_id": "% of Total"}, "textAlign": "right"},
+                {"if": {"column_id": "row_num"}, "textAlign": "center", "width": "35px"},
+            ],
+            sort_action="native",
+            page_size=10,
+        )
+        # Add row numbers to data
+        for i, row in enumerate(table_data, 1):
+            row["row_num"] = i
+
+        # Build mini map with markers
+        markers = []
+        max_calls = max(e[1] for e in hf)
+        for entry in hf:
+            addr, calls, note, lat, lon = entry[0], entry[1], entry[2], entry[3], entry[4]
+            # Scale radius 6-20px by call volume
+            radius = 6 + 14 * (calls / max_calls) if max_calls else 8
+            color = "#EF4444" if calls >= 50 else "#F59E0B" if calls >= 20 else C_PRIMARY
+            tooltip_text = f"{addr} — {calls:,} calls"
+            if note:
+                tooltip_text += f" ({note})"
+            markers.append(dl.CircleMarker(
+                center=[lat, lon], radius=radius,
+                color="#1E293B", weight=1.5,
+                fillColor=color, fillOpacity=0.85,
+                children=[dl.Tooltip(tooltip_text)],
+            ))
+
+        # Compute map center and zoom from marker bounds
+        lats = [e[3] for e in hf]
+        lons = [e[4] for e in hf]
+        center = [(min(lats)+max(lats))/2, (min(lons)+max(lons))/2]
+        # Estimate zoom from lat/lon spread
+        lat_spread = max(lats) - min(lats)
+        lon_spread = max(lons) - min(lons)
+        spread = max(lat_spread, lon_spread, 0.005)
+        zoom = 14 if spread < 0.01 else 13 if spread < 0.03 else 12 if spread < 0.06 else 11
+
+        mini_map = dl.Map(
+            center=center, zoom=zoom,
+            style={"width": "100%", "height": "360px", "borderRadius": "6px",
+                   "border": f"1px solid {C_BORDER}"},
+            children=[
+                dl.TileLayer(
+                    url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+                    attribution='&copy; <a href="https://carto.com/">CARTO</a>',
+                ),
+                dl.LayerGroup(markers),
+            ],
+        )
+
+        hf_content = html.Div([
+            _sub_header(f"High-Frequency Call Locations — {dept} (2024 Looker Studio Data)"),
+            html.P("Addresses with disproportionately high call volumes. Marker size = relative call volume.",
+                    style={"fontSize": "0.8rem", "color": C_MUTED, "margin": "0 0 10px",
+                           "fontFamily": FONT_STACK}),
+            html.Div([
+                html.Div(hf_table, style={"flex": "1", "minWidth": "320px"}),
+                html.Div(mini_map, style={"flex": "1", "minWidth": "320px"}),
+            ], style={"display": "flex", "gap": "16px", "flexWrap": "wrap"}),
+            html.P(
+                "Source: Looker Studio PDF reports (2024). "
+                "Edgerton data excluded due to cross-department address error in source report.",
+                style={"fontSize": "0.7rem", "color": C_MUTED, "marginTop": "8px",
+                       "fontFamily": FONT_STACK}),
+        ], style={"marginTop": "16px"})
+    else:
+        hf_content = html.Div()
+
+    # ── Data quality warning ───────────────────────────────────────────────────
+    dq_note = DATA_QUALITY_NOTES.get(dept)
+    if dq_note:
+        dq_content = html.Div([
+            html.Div([
+                html.Span("Data Quality Note: ", style={"fontWeight": "bold"}),
+                html.Span(dq_note),
+            ], style={
+                "background": "#3D3520", "borderLeft": f"3px solid {C_YELLOW}",
+                "padding": "10px 14px", "marginTop": "12px", "borderRadius": "4px",
+                "fontSize": "0.82rem", "color": "#F7C143", "fontFamily": FONT_STACK,
+            }),
+        ])
+    else:
+        dq_content = html.Div()
+
+    return cards, fig_als, fig_hist, fig_hr, fig_mo, hf_content, dq_content
 
 
 # ── Section 13: Utilization Analysis Callbacks ──────────────────────────────────
 
 def _build_util_df():
-    """Merge budget + muni_kpi into one utilization DataFrame with computed metrics."""
-    kpi = muni_kpi.copy()
-    # Normalise column names — strip extra spaces
-    kpi.columns = [c.strip() for c in kpi.columns]
+    """Merge budget + authoritative EMS call volumes into one utilization DataFrame."""
+    merged = budget.copy()
 
-    # Find the total-calls and EMS-calls columns by partial match (robust to minor renaming)
-    total_col = next((c for c in kpi.columns if "Total" in c and "Call" in c), None)
-    ems_col   = next((c for c in kpi.columns if "EMS" in c and "Call" in c), None)
+    # Use authoritative EMS call counts (user-provided ground truth, Mar 2026)
+    merged["EMS_Calls"] = merged["Municipality"].map(AUTH_EMS_CALLS).fillna(0)
 
-    if total_col:
-        kpi = kpi.rename(columns={total_col: "Total_Calls"})
-    if ems_col:
-        kpi = kpi.rename(columns={ems_col: "EMS_Calls_KPI"})
-
-    # Merge with budget
-    merged = budget.merge(kpi[["Municipality"] + (["Total_Calls"] if total_col else []) +
-                               (["EMS_Calls_KPI"] if ems_col else [])],
-                          on="Municipality", how="left")
-
-    # Fall back to NFIRS raw counts where kpi column is missing
-    raw_counts = (raw.groupby("Department")
-                     .agg(Total_Calls_raw=("IsEMS","count"),
-                          EMS_Calls_raw=("IsEMS","sum"))
-                     .reset_index()
-                     .rename(columns={"Department":"Municipality"}))
-    merged = merged.merge(raw_counts, on="Municipality", how="left")
-
-    merged["Total_Calls"]  = merged.get("Total_Calls",  merged["Total_Calls_raw"]).fillna(merged["Total_Calls_raw"])
-    merged["EMS_Calls"]    = merged.get("EMS_Calls_KPI", merged["EMS_Calls_raw"]).fillna(merged["EMS_Calls_raw"])
-
-    # Extrapolate partial-year departments to 12-month estimate
-    merged["Total_Calls"] = _extrapolate_annual(merged["Total_Calls"], merged["Municipality"])
-    merged["EMS_Calls"]   = _extrapolate_annual(merged["EMS_Calls"],   merged["Municipality"])
-
-    # Computed metrics
-    merged["Cost_Per_Call"]      = (merged["Total_Expense"] / merged["Total_Calls"]).round(0)
-    merged["Cost_Per_EMS_Call"]  = (merged["Total_Expense"] / merged["EMS_Calls"]).round(0)
+    # Computed metrics — EMS-only scope (Total_Calls = EMS_Calls since we only consider EMS)
+    merged["Total_Calls"]        = merged["EMS_Calls"]  # Alias for backward compat in charts
+    merged["Cost_Per_Call"]      = (merged["Total_Expense"] / merged["EMS_Calls"].replace(0, float("nan"))).round(0)
+    merged["Cost_Per_EMS_Call"]  = merged["Cost_Per_Call"]  # Same since EMS-only
     merged["Revenue_Recovery"]   = (merged["EMS_Revenue"] / merged["Total_Expense"] * 100).round(1)
-    merged["Tax_Per_Call"]       = (merged["Net_Tax"] / merged["Total_Calls"]).round(0)
+    merged["Tax_Per_Call"]       = (merged["Net_Tax"] / merged["EMS_Calls"].replace(0, float("nan"))).round(0)
     merged["Staff_Total"]        = merged["Staff_FT"].fillna(0) + merged["Staff_PT"].fillna(0)
     merged["EMS_Per_FT"]         = (merged["EMS_Calls"] / merged["Staff_FT"].replace(0, float("nan"))).round(1)
     merged["EMS_Per_Staff"]      = (merged["EMS_Calls"] / merged["Staff_Total"].replace(0, float("nan"))).round(1)
 
     # ── Population-normalized metrics ──────────────────────────────────────
     merged["Population"]         = merged["Municipality"].map(SERVICE_AREA_POP)
-    merged["Calls_Per_1K_Pop"]   = (merged["Total_Calls"] / merged["Population"] * 1000).round(1)
-    merged["EMS_Per_1K_Pop"]     = (merged["EMS_Calls"]   / merged["Population"] * 1000).round(1)
+    merged["Calls_Per_1K_Pop"]   = (merged["EMS_Calls"]   / merged["Population"] * 1000).round(1)
+    merged["EMS_Per_1K_Pop"]     = merged["Calls_Per_1K_Pop"]  # Same since EMS-only
     merged["Expense_Per_Capita"] = (merged["Total_Expense"] / merged["Population"]).round(0)
     merged["Tax_Per_Capita"]     = (merged["Net_Tax"]       / merged["Population"]).round(0)
     merged["Revenue_Per_Capita"] = (merged["EMS_Revenue"]   / merged["Population"]).round(0)
@@ -6196,12 +6335,12 @@ def _build_util_df():
     # adapt to the actual distribution rather than arbitrary cut-offs.
     _p75_cost = merged["Cost_Per_Call"].quantile(0.75)
     _p75_tax  = merged["Tax_Per_Call"].quantile(0.75)
-    _p25_vol  = merged["Total_Calls"].quantile(0.25)
+    _p25_vol  = merged["EMS_Calls"].quantile(0.25)
     _p25_rec  = merged["Revenue_Recovery"].quantile(0.25)
     _p25_staff = merged["EMS_Per_Staff"].quantile(0.25)
     merged["Flag_Cost"]     = (merged["Cost_Per_Call"]    > _p75_cost).astype(int)
     merged["Flag_Tax"]      = (merged["Tax_Per_Call"]     > _p75_tax).astype(int)
-    merged["Flag_Volume"]   = (merged["Total_Calls"]      < _p25_vol).astype(int)
+    merged["Flag_Volume"]   = (merged["EMS_Calls"]        < _p25_vol).astype(int)
     merged["Flag_Recovery"] = (merged["Revenue_Recovery"] < _p25_rec).astype(int)
     merged["Flag_Staff"]    = (merged["EMS_Per_Staff"]    < _p25_staff).astype(int)
     merged["Flags"]         = (merged[["Flag_Cost","Flag_Tax","Flag_Volume",
@@ -6238,17 +6377,17 @@ def _get_utilization_figs():
         marker_color=bar_colors,
         text=u1["Cost_Per_Call"].apply(lambda v: f"${v:,.0f}"),
         textposition="outside",
-        customdata=u1[["Service_Level","Model","Total_Calls","Flags"]].values,
+        customdata=u1[["Service_Level","Model","EMS_Calls","Flags"]].values,
         hovertemplate=(
             "<b>%{y}</b><br>"
             "Cost/Call: $%{x:,.0f}<br>"
             "Service: %{customdata[0]} · Model: %{customdata[1]}<br>"
-            "Total Calls: %{customdata[2]:,}<br>"
+            "EMS Calls: %{customdata[2]:,}<br>"
             "Outlier Flags: %{customdata[3]}<extra></extra>"
         ),
     ))
     fig1.update_layout(
-        title="Cost Per Emergency Call (Total Expense ÷ Total Calls)",
+        title="Cost Per EMS Call (Total Expense ÷ EMS Calls)",
         xaxis_title="$ per call",
         xaxis_tickprefix="$",
     )
@@ -6311,17 +6450,17 @@ def _get_utilization_figs():
         marker_color=tax_colors,
         text=u3["Tax_Per_Call"].apply(lambda v: f"${v:,.0f}"),
         textposition="outside",
-        customdata=u3[["Net_Tax","Total_Calls","Service_Level"]].values,
+        customdata=u3[["Net_Tax","EMS_Calls","Service_Level"]].values,
         hovertemplate=(
             "<b>%{x}</b><br>"
             "Tax/Call: $%{y:,.0f}<br>"
             "Net Tax: $%{customdata[0]:,.0f}<br>"
-            "Total Calls: %{customdata[1]:,}<br>"
+            "EMS Calls: %{customdata[1]:,}<br>"
             "Service Level: %{customdata[2]}<extra></extra>"
         ),
     ))
     fig3.update_layout(
-        title="Taxpayer Subsidy Per Emergency Call (Net Tax ÷ Total Calls)",
+        title="Taxpayer Subsidy Per EMS Call (Net Tax ÷ EMS Calls)",
         yaxis_title="$ per call (tax levy only)",
         yaxis_tickprefix="$",
     )
@@ -6455,13 +6594,13 @@ def _get_utilization_figs():
         marker_color=tpc_colors,
         text=u6["Tax_Per_Capita"].apply(lambda v: f"${v:,.0f}"),
         textposition="outside",
-        customdata=u6[["Net_Tax", "Population", "Total_Calls", "Service_Level"]].values,
+        customdata=u6[["Net_Tax", "Population", "EMS_Calls", "Service_Level"]].values,
         hovertemplate=(
             "<b>%{y}</b><br>"
             "Tax/Resident: $%{x:,.0f}<br>"
             "Net Tax: $%{customdata[0]:,.0f}<br>"
             "Service Area Pop.: %{customdata[1]:,}<br>"
-            "Total Calls: %{customdata[2]:,}<br>"
+            "EMS Calls: %{customdata[2]:,}<br>"
             "Service Level: %{customdata[3]}<extra></extra>"
         ),
     ))
@@ -6498,14 +6637,13 @@ def _get_utilization_figs():
         marker_color=svc_colors7,
         text=u7["Calls_Per_1K_Pop"].apply(lambda v: f"{v:,.0f}"),
         textposition="outside",
-        customdata=u7[["Total_Calls", "Population", "Service_Level", "EMS_Per_1K_Pop"]].values,
+        customdata=u7[["EMS_Calls", "Population", "Service_Level"]].values,
         hovertemplate=(
             "<b>%{y}</b><br>"
-            "Calls/1K Residents: %{x:,.0f}<br>"
-            "Raw Total Calls: %{customdata[0]:,}<br>"
+            "EMS Calls/1K Residents: %{x:,.0f}<br>"
+            "EMS Calls: %{customdata[0]:,}<br>"
             "Service Area Pop.: %{customdata[1]:,}<br>"
-            "Service Level: %{customdata[2]}<br>"
-            "EMS Calls/1K: %{customdata[3]:,.0f}<extra></extra>"
+            "Service Level: %{customdata[2]}<extra></extra>"
         ),
     ))
     # WI statewide benchmark reference line
@@ -6548,10 +6686,10 @@ def _get_utilization_figs():
             ))
     fig7.update_layout(
         title=(
-            "Call Rate Per 1,000 Residents (Total Calls \u00f7 Service Area Population \u00d7 1,000)"
+            "EMS Call Rate Per 1,000 Residents (EMS Calls \u00f7 Service Area Population \u00d7 1,000)"
             "<br><sup>Color = service level  \u00b7  Western Lakes: full Waukesha Co. district, not Jefferson Co. only</sup>"
         ),
-        xaxis_title="Calls per 1,000 residents",
+        xaxis_title="EMS calls per 1,000 residents",
     )
     _apply_chart_style(fig7, height=460, legend_below=True, title_has_subtitle=True)
     fig7.update_layout(
@@ -6569,13 +6707,13 @@ def _get_utilization_figs():
     # Compute threshold labels from the actual data for transparency
     _p75c = u["Cost_Per_Call"].quantile(0.75)
     _p75t = u["Tax_Per_Call"].quantile(0.75)
-    _p25v = u["Total_Calls"].quantile(0.25)
+    _p25v = u["EMS_Calls"].quantile(0.25)
     _p25r = u["Revenue_Recovery"].quantile(0.25)
     _p25s = u["EMS_Per_Staff"].quantile(0.25)
     flag_map = {
         "Flag_Cost":     f"Cost/call > ${_p75c:,.0f} (75th pctl)",
         "Flag_Tax":      f"Tax/call > ${_p75t:,.0f} (75th pctl)",
-        "Flag_Volume":   f"Volume < {_p25v:,.0f} calls (25th pctl)",
+        "Flag_Volume":   f"Volume < {_p25v:,.0f} EMS calls (25th pctl)",
         "Flag_Recovery": f"Recovery < {_p25r:.0f}% (25th pctl)",
         "Flag_Staff":    f"Staff util < {_p25s:.0f} EMS/staff (25th pctl)",
     }
@@ -6591,14 +6729,150 @@ def _get_utilization_figs():
             "Cost/Call":        f"${r['Cost_Per_Call']:,.0f}" if pd.notna(r.get("Cost_Per_Call")) else "—",
             "Recovery %":       f"{r['Revenue_Recovery']:.1f}%" if pd.notna(r.get("Revenue_Recovery")) else "—",
             "Tax/Call":         f"${r['Tax_Per_Call']:,.0f}" if pd.notna(r.get("Tax_Per_Call")) else "—",
-            "Total Calls":      f"{int(r['Total_Calls']):,}" if pd.notna(r.get("Total_Calls")) else "—",
+            "EMS Calls":        f"{int(r['EMS_Calls']):,}" if pd.notna(r.get("EMS_Calls")) else "—",
             "Level":            r.get("Service_Level","—"),
         })
     rows.sort(key=lambda x: -x["# Flags"])
     cols = [{"name": c, "id": c} for c in
             ["Department","# Flags","Why Flagged","Cost/Call","Recovery %",
-             "Tax/Call","Total Calls","Level"]]
+             "Tax/Call","EMS Calls","Level"]]
     return fig1, fig2, fig3, fig4, fig5, rows, cols, fig6, fig7
+
+
+# ── NEW: Billing Collections Chart (Chief Association Data) ──────────────────
+@lru_cache(maxsize=1)
+def _get_billing_collections_fig():
+    """Grouped bar chart: 2024 vs 2025 net collections by agency."""
+    bc = BILLING_COLLECTIONS.sort_values("Collections_2025", ascending=True)
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        y=bc["Agency"], x=bc["Collections_2024"], orientation="h",
+        name="2024 Net Collections", marker_color=C_MUTED,
+        text=bc["Collections_2024"].apply(lambda v: f"${v:,.0f}"),
+        textposition="outside", textfont=dict(size=10),
+    ))
+    fig.add_trace(go.Bar(
+        y=bc["Agency"], x=bc["Collections_2025"], orientation="h",
+        name="2025 Net Collections", marker_color=C_PRIMARY,
+        text=bc["Collections_2025"].apply(lambda v: f"${v:,.0f}"),
+        textposition="outside", textfont=dict(size=10),
+    ))
+    _total_24 = bc["Collections_2024"].sum()
+    _total_25 = bc["Collections_2025"].sum()
+    _total_chg = _total_25 - _total_24
+    fig.update_layout(
+        title=(
+            "Actual Net Billing Collections by Agency — 2024 vs 2025"
+            f"<br><sup style='color:{C_MUTED}'>Source: Jefferson County Chief Association Agency Data 2025.xlsx "
+            f"| 9 of 12 EMS agencies reporting | County total: "
+            f"${_total_24:,.0f} (2024) → ${_total_25:,.0f} (2025) = +${_total_chg:,.0f} (+{100*_total_chg/_total_24:.0f}%)</sup>"
+        ),
+        barmode="group",
+    )
+    _apply_chart_style(fig, height=480, legend_below=True, title_has_subtitle=True)
+    fig.update_layout(margin=dict(l=20, r=120, t=70, b=20))
+    return fig
+
+@lru_cache(maxsize=1)
+def _get_billing_change_fig():
+    """Bar chart showing YoY change in collections."""
+    bc = BILLING_COLLECTIONS.sort_values("Change", ascending=True)
+    colors = [C_GREEN if v > 0 else C_RED for v in bc["Change"]]
+    fig = go.Figure(go.Bar(
+        y=bc["Agency"], x=bc["Change"], orientation="h",
+        marker_color=colors,
+        text=[f"+${v:,.0f} ({p:.0f}%)" if v > 0 else f"${v:,.0f} ({p:.0f}%)"
+              for v, p in zip(bc["Change"], bc["Pct_Change"])],
+        textposition="outside", textfont=dict(size=10),
+        customdata=bc[["Collections_2024", "Collections_2025", "Pct_Change"]].values,
+        hovertemplate=(
+            "<b>%{y}</b><br>"
+            "2024: $%{customdata[0]:,.0f}<br>"
+            "2025: $%{customdata[1]:,.0f}<br>"
+            "Change: $%{x:,.0f} (%{customdata[2]:.1f}%)<extra></extra>"
+        ),
+    ))
+    fig.update_layout(
+        title=(
+            "Year-over-Year Change in Net Collections (2024 → 2025)"
+            f"<br><sup style='color:{C_MUTED}'>Source: Jefferson County Chief Association Agency Data 2025.xlsx</sup>"
+        ),
+    )
+    _apply_chart_style(fig, height=420, title_has_subtitle=True)
+    fig.update_layout(margin=dict(l=20, r=120, t=70, b=20))
+    return fig
+
+
+# ── NEW: Mill Rate Levy Projection Charts ────────────────────────────────────
+@lru_cache(maxsize=1)
+def _get_levy_projection_figs():
+    """Stacked bar chart showing levy distribution at selected mill rates."""
+    # Show 4 representative mill rates
+    show_rates = [0.1, 0.25, 0.5, 1.0]
+    lp = LEVY_BY_PROVIDER.copy()
+    fig = go.Figure()
+    _colors = px.colors.qualitative.Set3[:12]
+    for i, (_, row) in enumerate(lp.iterrows()):
+        fig.add_trace(go.Bar(
+            x=[f"{r} mill" for r in show_rates],
+            y=[row[r] for r in show_rates],
+            name=row["Provider"],
+            marker_color=_colors[i % len(_colors)],
+            hovertemplate=f"<b>{row['Provider']}</b><br>" + "Mill rate: %{x}<br>Levy: $%{y:,.0f}<extra></extra>",
+        ))
+    fig.update_layout(
+        barmode="stack",
+        title=(
+            "Hypothetical County EMS Levy by Provider at Selected Mill Rates"
+            f"<br><sup style='color:{C_MUTED}'>Source: Emergency Services Population - Jefferson County.xlsx "
+            f"(Payment by Service Provider) | WI DOA 2025 Preliminary Estimates</sup>"
+        ),
+        yaxis_title="Levy Amount ($)",
+    )
+    _apply_chart_style(fig, height=500, legend_below=True, title_has_subtitle=True)
+
+    # Second chart: table of all mill rates
+    table_data = []
+    for _, row in lp.iterrows():
+        entry = {"Provider": row["Provider"]}
+        for r in _MILL_RATES:
+            entry[f"{r} mill"] = f"${int(row[r]):,}"
+        table_data.append(entry)
+    # Totals row
+    totals = {"Provider": "COUNTY TOTAL"}
+    for r in _MILL_RATES:
+        totals[f"{r} mill"] = f"${_LEVY_COUNTY_TOTALS[r]:,}"
+    table_data.append(totals)
+    table_cols = [{"name": "Provider", "id": "Provider"}] + [
+        {"name": f"{r} mill", "id": f"{r} mill"} for r in _MILL_RATES
+    ]
+    return fig, table_data, table_cols
+
+
+# ── NEW: Population by EMS Provider Table ────────────────────────────────────
+@lru_cache(maxsize=1)
+def _get_population_table():
+    """Build a table showing WI DOA populations per EMS provider."""
+    ems_depts = [d for d in SERVICE_AREA_POP if d not in ("Helenville", "Rome", "Sullivan")]
+    rows = []
+    for dept in sorted(ems_depts, key=lambda d: SERVICE_AREA_POP[d], reverse=True):
+        pop = SERVICE_AREA_POP[dept]
+        calls = AUTH_EMS_CALLS.get(dept, 0)
+        per_1k = round(calls / pop * 1000, 1) if pop > 0 else 0
+        rows.append({
+            "Department": dept,
+            "Service Area Population": f"{pop:,}",
+            "2024 EMS Calls": f"{calls:,}",
+            "Calls per 1K Pop": per_1k,
+        })
+    rows.append({
+        "Department": "COUNTY TOTAL",
+        "Service Area Population": f"{sum(SERVICE_AREA_POP[d] for d in ems_depts):,}",
+        "2024 EMS Calls": f"{_AUTH_COUNTY_TOTAL:,}",
+        "Calls per 1K Pop": round(_AUTH_COUNTY_TOTAL / sum(SERVICE_AREA_POP[d] for d in ems_depts) * 1000, 1),
+    })
+    cols = [{"name": c, "id": c} for c in rows[0].keys()]
+    return rows, cols
 
 
 # ── NEW: Peterson 24/7 ALS Waterfall ──────────────────────────────────────────
@@ -6656,7 +6930,7 @@ def _get_fig_contract_timeline():
     fig_gantt.update_yaxes(autorange="reversed", title="", showgrid=False)
 
     # "Today" marker
-    today_dt = pd.Timestamp("2026-03-16")
+    today_dt = pd.Timestamp.now().normalize()
     fig_gantt.add_shape(
         type="line", x0=today_dt, x1=today_dt, y0=0, y1=1,
         yref="paper", line=dict(dash="dot", color=C_TEXT, width=1.5),
@@ -6707,5 +6981,6 @@ def _get_fig_contract_timeline():
 
 # ── 10. Run ─────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    print("\nDashboard ready -- open http://127.0.0.1:8050\n")
-    app.run(debug=True, port=8050)
+    port = int(os.environ.get("PORT", 8050))
+    print(f"\nDashboard ready -- open http://127.0.0.1:{port}\n")
+    app.run(debug=True, host="0.0.0.0", port=port)

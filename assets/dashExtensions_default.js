@@ -1,34 +1,44 @@
 window.dashExtensions = Object.assign({}, window.dashExtensions, {
     default: {
         function0: function(feature, context) {
-            var dept = feature.properties.dept || feature.properties.NAME;
-            var cm = context.hideout.colorMap || {};
+            var showBorders = context.hideout.showMuniBorders || false;
+            return {
+                fillColor: 'transparent',
+                color: showBorders ? '#334155' : 'transparent',
+                weight: showBorders ? 1.5 : 0,
+                fillOpacity: 0,
+            };
+        },
+        function1: function(feature, context) {
+            var dept = feature.properties.dept || '';
+            var cm = (context.hideout || {}).colorMap || {};
             return {
                 fillColor: cm[dept] || '#CBD5E1',
-                color: '#334155',
-                weight: 1.5,
-                fillOpacity: 0.50,
+                color: '#00838F',
+                weight: 2.5,
+                fillOpacity: 0.45,
             };
         },
-        function1: function(feature) {
-            return {
-                fillColor: '#00BCD4',
-                color: '#00ACC1',
-                weight: 2,
-                fillOpacity: 0.18,
-                dashArray: '6 4'
-            };
+        function2: function(feature, layer) {
+            var name = feature.properties.MAPLABEL || '';
+            if (name) {
+                layer.bindTooltip('<b>' + name + '</b>', {
+                    sticky: true,
+                    direction: 'top',
+                    opacity: 0.92
+                });
+            }
         },
-        function2: function(feature) {
+        function3: function(feature) {
             return {
                 fillColor: '#FF5722',
                 color: '#E64A19',
-                weight: 2,
-                fillOpacity: 0.18,
-                dashArray: '6 4'
+                weight: 1.5,
+                fillOpacity: 0.10,
+                dashArray: '4 3'
             };
         },
-        function3: function(feature) {
+        function4: function(feature) {
             return {
                 fillColor: '#FFEB3B',
                 color: '#FBC02D',
@@ -37,7 +47,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                 dashArray: '4 3'
             };
         },
-        function4: function(feature) {
+        function5: function(feature) {
             return {
                 fillColor: '#9C27B0',
                 color: '#7B1FA2',
@@ -46,7 +56,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                 dashArray: '5 3'
             };
         },
-        function5: function(feature, layer) {
+        function6: function(feature, layer) {
             var z = feature.properties.ZCTA5 || '';
             if (z) {
                 layer.bindTooltip(z, {
@@ -57,7 +67,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                 });
             }
         },
-        function6: function(feature, context) {
+        function7: function(feature, context) {
             var z = feature.properties.ZCTA5 || '';
             var cm = (context.hideout || {}).zipColorMap || {};
             var c = cm[z];
@@ -78,7 +88,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                 dashArray: '4 3'
             };
         },
-        function7: function(feature, layer) {
+        function8: function(feature, layer) {
             var p = feature.properties;
             var z = p.ZCTA5 || '';
             var calls = p._calls || 0;
