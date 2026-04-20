@@ -1,0 +1,11 @@
+Station_A,Station_B,Distance_Miles,Est_Drive_Min,Within_NFPA_1720
+Jefferson,Johnson Creek,5.0,11.1,True
+Jefferson,Helenville,5.16,11.5,True
+Helenville,Western Lakes,5.67,12.6,True
+Johnson Creek,Helenville,5.7,12.7,True
+Fort Atkinson,Jefferson,5.76,12.8,True
+Johnson Creek,Lake Mills,7.06,15.7,False
+Lake Mills,Cambridge,7.44,16.6,False
+Watertown,Ixonia,7.47,16.6,False
+Jefferson,Lake Mills,7.59,16.9,False
+Watertown,Johnson Creek,7.92,17.7,False

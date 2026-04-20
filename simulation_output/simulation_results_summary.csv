@@ -1,0 +1,15 @@
+KPI,Current,Proposed,Delta
+Total Calls,13754.0,13754.0,0.0
+Secondary Calls,78.0,3088.0,3010.0
+Secondary %,0.57,22.45,21.88
+Median Secondary RT (min),8.0,6.34,-1.66
+Mean Secondary RT (min),8.87,9.51,0.64
+P90 Secondary RT (min),14.0,19.5,5.5
+Max Secondary RT (min),38.3,46.28,7.98
+Secondary within 10 min (%),67.95,68.62,0.67
+Secondary within 14 min (%),91.03,74.71,-16.32
+Overall Median RT (min),6.0,5.0,-1.0
+Overall P90 RT (min),12.0,14.0,2.0
+Calls with Wait (queue),78.0,0.0,-78.0
+System Utilization (%),4.96,7.16,2.2
+Total Ambulance Units,26.0,18.0,-8.0

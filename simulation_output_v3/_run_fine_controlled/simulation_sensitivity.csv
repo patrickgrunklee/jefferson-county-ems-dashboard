@@ -1,0 +1,7 @@
+K,Secondary_Calls,Median_Secondary_RT,P90_Secondary_RT,Mean_Secondary_RT,Pct_Within_10min,Pct_Within_14min,Queue_Events,System_Utilization_Pct,Max_Unit_Utilization_Pct,Total_Ambulances
+2,3088,17.8,47.85,21.51,38.6,43.6,288,9.21,16.82,14
+3,3088,13.78,29.91,14.74,49.1,54.0,47,8.59,13.62,15
+4,3088,3.83,24.3,11.74,56.5,61.4,7,8.06,13.02,16
+5,3088,3.83,24.3,10.48,65.0,68.0,0,7.58,12.97,17
+6,3088,3.48,20.66,8.73,70.7,73.8,0,7.16,11.88,18
+8,3088,3.48,20.66,7.7,76.2,76.6,0,6.45,11.88,20

@@ -1,0 +1,13 @@
+__pycache__
+*.pyc
+.git
+*.zip
+*.db
+*.png
+*.html
+draft.docx
+powerbi/
+EMS Budgets/
+drive-download-*
+research_documents.db
+*.mp4

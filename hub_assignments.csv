@@ -1,0 +1,8 @@
+Department,Service_Level,Current_Night_Model,Night_Calls_Yr,Current_Night_RT,Assigned_Hub,Distance_Miles,Drive_Time_Min,Est_Hub_RT_Min,RT_Change
+Waterloo,AEMT,Volunteer/On-call,83,10.6,Watertown,12.4,27.6,20.9,10.3
+Ixonia,BLS,Volunteer/On-call,46,15.3,Watertown,7.5,16.6,15.4,0.1
+Palmyra,BLS,Volunteer/On-call,5,11.0,Fort Atkinson,13.3,29.6,20.1,9.1
+Cambridge,ALS,Volunteer/On-call,13,7.9,Fort Atkinson,10.7,23.8,17.2,9.3
+Lake Mills,BLS,Volunteer/On-call,82,,Fort Atkinson,11.1,24.7,17.7,
+Johnson Creek,ALS,24/7 Career,77,9.7,Watertown,7.9,17.7,15.9,6.2
+Jefferson,ALS,24/7 Career,233,7.9,Fort Atkinson,5.8,12.8,11.7,3.8

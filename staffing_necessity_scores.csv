@@ -1,0 +1,241 @@
+Dept,Hour,Freq_Score,Conc_Score,RT_Score,ALS_Score,Composite,Flag,Is_Night,FT_Staff,Has_24_7
+Watertown,0,12.0,25.0,7.0,25.0,68.9,High Need,True,31,True
+Watertown,1,8.3,25.0,7.9,25.0,66.2,High Need,True,31,True
+Watertown,2,8.7,25.0,14.8,25.0,73.5,High Need,True,31,True
+Watertown,3,7.9,25.0,15.3,23.0,71.2,High Need,True,31,True
+Watertown,4,8.1,21.4,25.0,20.8,75.3,High Need,True,31,True
+Watertown,5,8.3,16.7,10.2,25.0,60.1,High Need,True,31,True
+Watertown,6,12.0,25.0,7.0,25.0,68.9,High Need,False,31,True
+Watertown,7,16.9,25.0,2.6,25.0,69.6,High Need,False,31,True
+Watertown,8,19.6,25.0,1.0,25.0,70.7,High Need,False,31,True
+Watertown,9,25.0,25.0,5.0,25.0,80.0,High Need,False,31,True
+Watertown,10,23.3,25.0,5.0,25.0,78.3,High Need,False,31,True
+Watertown,11,23.8,25.0,5.0,25.0,78.8,High Need,False,31,True
+Watertown,12,19.0,25.0,0.0,25.0,69.1,High Need,False,31,True
+Watertown,13,23.6,25.0,2.0,25.0,75.5,High Need,False,31,True
+Watertown,14,20.2,25.0,1.2,25.0,71.5,High Need,False,31,True
+Watertown,15,18.2,25.0,1.6,25.0,69.8,High Need,False,31,True
+Watertown,16,21.1,25.0,1.9,25.0,73.0,High Need,False,31,True
+Watertown,17,23.6,25.0,3.6,25.0,77.2,High Need,False,31,True
+Watertown,18,19.8,25.0,1.1,25.0,70.9,High Need,False,31,True
+Watertown,19,23.8,25.0,10.7,25.0,84.5,High Need,False,31,True
+Watertown,20,22.7,25.0,3.0,25.0,75.7,High Need,False,31,True
+Watertown,21,14.7,25.0,1.9,25.0,66.6,High Need,False,31,True
+Watertown,22,12.2,25.0,5.0,25.0,67.2,High Need,True,31,True
+Watertown,23,9.7,25.0,4.8,25.0,64.5,High Need,True,31,True
+Fort Atkinson,0,9.2,9.0,7.8,25.0,50.9,High Need,True,16,True
+Fort Atkinson,1,8.9,25.0,12.2,25.0,71.1,High Need,True,16,True
+Fort Atkinson,2,7.9,0.0,12.9,25.0,45.8,Adequate,True,16,True
+Fort Atkinson,3,8.2,10.1,1.1,22.7,42.1,Adequate,True,16,True
+Fort Atkinson,4,7.2,5.7,11.8,25.0,49.7,Adequate,True,16,True
+Fort Atkinson,5,9.4,21.9,11.9,25.0,68.2,High Need,True,16,True
+Fort Atkinson,6,8.7,9.5,9.0,25.0,52.2,High Need,False,16,True
+Fort Atkinson,7,16.8,25.0,1.0,25.0,67.8,High Need,False,16,True
+Fort Atkinson,8,23.5,15.8,5.0,25.0,69.3,High Need,False,16,True
+Fort Atkinson,9,23.3,25.0,2.2,25.0,75.5,High Need,False,16,True
+Fort Atkinson,10,22.8,23.6,5.0,25.0,76.3,High Need,False,16,True
+Fort Atkinson,11,24.3,20.4,0.1,25.0,69.8,High Need,False,16,True
+Fort Atkinson,12,21.8,15.2,1.6,25.0,63.6,High Need,False,16,True
+Fort Atkinson,13,25.0,23.1,3.1,25.0,76.2,High Need,False,16,True
+Fort Atkinson,14,24.0,18.9,5.0,25.0,72.9,High Need,False,16,True
+Fort Atkinson,15,14.1,20.5,5.0,25.0,64.6,High Need,False,16,True
+Fort Atkinson,16,24.0,22.3,5.0,25.0,76.3,High Need,False,16,True
+Fort Atkinson,17,20.3,25.0,1.7,25.0,72.0,High Need,False,16,True
+Fort Atkinson,18,20.3,25.0,0.2,25.0,70.5,High Need,False,16,True
+Fort Atkinson,19,21.3,25.0,0.2,24.7,71.2,High Need,False,16,True
+Fort Atkinson,20,19.1,10.8,5.2,25.0,60.1,High Need,False,16,True
+Fort Atkinson,21,18.3,25.0,5.4,25.0,73.7,High Need,False,16,True
+Fort Atkinson,22,13.4,12.3,9.3,25.0,60.0,High Need,True,16,True
+Fort Atkinson,23,9.7,8.5,4.9,24.0,47.2,Adequate,True,16,True
+Whitewater,0,13.8,25.0,13.1,18.6,70.5,High Need,True,15,True
+Whitewater,1,15.6,25.0,8.9,25.0,74.5,High Need,True,15,True
+Whitewater,2,12.9,22.7,14.3,19.9,69.9,High Need,True,15,True
+Whitewater,3,11.8,25.0,15.3,9.4,61.5,High Need,True,15,True
+Whitewater,4,8.8,25.0,15.8,18.7,68.4,High Need,True,15,True
+Whitewater,5,9.4,25.0,20.9,19.5,74.9,High Need,True,15,True
+Whitewater,6,10.0,25.0,14.4,25.0,74.4,High Need,False,15,True
+Whitewater,7,14.1,25.0,3.8,22.1,65.0,High Need,False,15,True
+Whitewater,8,18.8,25.0,3.1,25.0,71.9,High Need,False,15,True
+Whitewater,9,21.8,25.0,1.6,24.5,72.9,High Need,False,15,True
+Whitewater,10,25.0,25.0,5.0,22.8,77.8,High Need,False,15,True
+Whitewater,11,20.6,25.0,5.0,25.0,75.6,High Need,False,15,True
+Whitewater,12,19.7,25.0,5.0,19.6,69.3,High Need,False,15,True
+Whitewater,13,22.9,25.0,6.0,23.2,77.2,High Need,False,15,True
+Whitewater,14,18.2,25.0,5.0,23.2,71.4,High Need,False,15,True
+Whitewater,15,22.1,25.0,5.0,19.2,71.2,High Need,False,15,True
+Whitewater,16,22.1,25.0,5.0,22.5,74.6,High Need,False,15,True
+Whitewater,17,24.4,25.0,2.4,17.3,69.2,High Need,False,15,True
+Whitewater,18,22.4,25.0,1.0,20.6,68.9,High Need,False,15,True
+Whitewater,19,20.3,25.0,2.1,20.8,68.3,High Need,False,15,True
+Whitewater,20,21.8,25.0,5.0,18.6,70.3,High Need,False,15,True
+Whitewater,21,17.9,25.0,0.6,16.4,60.0,High Need,False,15,True
+Whitewater,22,16.5,25.0,1.4,25.0,67.9,High Need,True,15,True
+Whitewater,23,15.0,25.0,8.5,9.8,58.3,High Need,True,15,True
+Edgerton,0,9.7,25.0,24.1,25.0,83.7,High Need,True,24,True
+Edgerton,1,6.6,25.0,20.6,25.0,77.2,High Need,True,24,True
+Edgerton,2,8.9,24.8,7.3,25.0,66.0,High Need,True,24,True
+Edgerton,3,6.2,25.0,15.9,24.6,71.8,High Need,True,24,True
+Edgerton,4,7.8,25.0,11.7,25.0,69.5,High Need,True,24,True
+Edgerton,5,9.3,25.0,15.4,25.0,74.7,High Need,True,24,True
+Edgerton,6,11.2,25.0,11.8,25.0,72.9,High Need,False,24,True
+Edgerton,7,13.4,25.0,7.7,25.0,71.1,High Need,False,24,True
+Edgerton,8,15.9,25.0,0.5,25.0,66.4,High Need,False,24,True
+Edgerton,9,24.2,25.0,12.2,25.0,86.5,High Need,False,24,True
+Edgerton,10,23.5,25.0,5.0,25.0,78.5,High Need,False,24,True
+Edgerton,11,23.3,25.0,5.0,25.0,78.3,High Need,False,24,True
+Edgerton,12,20.3,25.0,8.6,23.9,77.8,High Need,False,24,True
+Edgerton,13,25.0,25.0,5.0,25.0,80.0,High Need,False,24,True
+Edgerton,14,21.6,25.0,2.9,25.0,74.5,High Need,False,24,True
+Edgerton,15,24.2,25.0,5.0,25.0,79.2,High Need,False,24,True
+Edgerton,16,21.0,25.0,5.0,25.0,76.0,High Need,False,24,True
+Edgerton,17,19.1,25.0,0.0,25.0,69.2,High Need,False,24,True
+Edgerton,18,16.3,25.0,0.9,25.0,67.2,High Need,False,24,True
+Edgerton,19,22.2,25.0,22.1,25.0,94.2,High Need,False,24,True
+Edgerton,20,14.8,25.0,5.0,25.0,69.8,High Need,False,24,True
+Edgerton,21,16.9,25.0,5.0,25.0,71.9,High Need,False,24,True
+Edgerton,22,10.8,25.0,14.0,24.1,73.9,High Need,True,24,True
+Edgerton,23,13.3,25.0,17.0,25.0,80.3,High Need,True,24,True
+Jefferson,0,0.0,0.0,12.5,0.0,12.5,OVERSTAFFED,True,6,True
+Jefferson,1,2.1,0.0,5.0,0.0,7.1,OVERSTAFFED,True,6,True
+Jefferson,2,0.0,0.0,12.5,0.0,12.5,OVERSTAFFED,True,6,True
+Jefferson,3,4.2,0.0,25.0,0.0,29.2,Adequate,True,6,True
+Jefferson,4,4.2,0.0,5.0,0.0,9.2,OVERSTAFFED,True,6,True
+Jefferson,5,4.2,0.0,25.0,0.0,29.2,Adequate,True,6,True
+Jefferson,6,6.2,0.0,7.4,0.0,13.6,Adequate,False,6,True
+Jefferson,7,2.1,0.0,25.0,0.0,27.1,Adequate,False,6,True
+Jefferson,8,6.2,0.0,5.0,0.0,11.2,Adequate,False,6,True
+Jefferson,9,6.2,0.0,7.4,0.0,13.6,Adequate,False,6,True
+Jefferson,10,4.2,0.0,25.0,0.0,29.2,Adequate,False,6,True
+Jefferson,11,8.3,0.0,5.0,0.0,13.3,Adequate,False,6,True
+Jefferson,12,16.7,0.0,7.4,0.0,24.0,Adequate,False,6,True
+Jefferson,13,8.3,0.0,13.6,0.0,21.9,Adequate,False,6,True
+Jefferson,14,18.8,0.0,1.8,0.0,20.6,Adequate,False,6,True
+Jefferson,15,25.0,0.0,5.0,0.0,30.0,Adequate,False,6,True
+Jefferson,16,18.8,0.0,5.0,0.0,23.8,Adequate,False,6,True
+Jefferson,17,12.5,25.0,3.2,0.0,40.7,Adequate,False,6,True
+Jefferson,18,12.5,0.0,5.0,0.0,17.5,Adequate,False,6,True
+Jefferson,19,6.2,0.0,1.8,0.0,8.1,Adequate,False,6,True
+Jefferson,20,10.4,0.0,25.0,0.0,35.4,Adequate,False,6,True
+Jefferson,21,2.1,0.0,24.0,0.0,26.1,Adequate,False,6,True
+Jefferson,22,6.2,0.0,10.1,0.0,16.4,OVERSTAFFED,True,6,True
+Jefferson,23,4.2,0.0,25.0,0.0,29.2,Adequate,True,6,True
+Johnson Creek,0,6.1,0.0,25.0,15.6,46.7,Adequate,True,3,True
+Johnson Creek,1,6.1,0.0,25.0,25.0,56.1,High Need,True,3,True
+Johnson Creek,2,3.0,0.0,25.0,15.6,43.7,Adequate,True,3,True
+Johnson Creek,3,8.3,0.0,25.0,22.7,56.1,High Need,True,3,True
+Johnson Creek,4,6.1,0.0,16.2,25.0,47.2,Adequate,True,3,True
+Johnson Creek,5,6.8,25.0,13.9,25.0,70.7,High Need,True,3,True
+Johnson Creek,6,13.6,0.0,17.6,24.3,55.5,High Need,False,3,True
+Johnson Creek,7,17.4,25.0,8.0,19.0,69.5,High Need,False,3,True
+Johnson Creek,8,17.4,25.0,5.0,25.0,72.4,High Need,False,3,True
+Johnson Creek,9,22.0,25.0,5.0,25.0,77.0,High Need,False,3,True
+Johnson Creek,10,14.4,0.0,4.1,25.0,43.5,Adequate,False,3,True
+Johnson Creek,11,14.4,0.0,12.0,25.0,51.4,High Need,False,3,True
+Johnson Creek,12,21.2,25.0,5.0,24.6,75.8,High Need,False,3,True
+Johnson Creek,13,17.4,25.0,5.0,25.0,72.4,High Need,False,3,True
+Johnson Creek,14,18.2,0.0,3.7,25.0,46.9,Adequate,False,3,True
+Johnson Creek,15,14.4,25.0,5.0,25.0,69.4,High Need,False,3,True
+Johnson Creek,16,17.4,25.0,5.0,25.0,72.4,High Need,False,3,True
+Johnson Creek,17,25.0,10.1,5.0,25.0,65.1,High Need,False,3,True
+Johnson Creek,18,22.7,25.0,6.5,25.0,79.2,High Need,False,3,True
+Johnson Creek,19,22.7,25.0,5.6,25.0,78.4,High Need,False,3,True
+Johnson Creek,20,15.9,15.9,11.6,23.8,67.2,High Need,False,3,True
+Johnson Creek,21,11.4,22.2,5.3,25.0,63.9,High Need,False,3,True
+Johnson Creek,22,15.9,23.8,25.0,20.8,85.6,High Need,True,3,True
+Johnson Creek,23,6.1,20.8,18.3,25.0,70.2,High Need,True,3,True
+Waterloo,0,7.4,16.7,25.0,25.0,74.0,High Need,True,4,False
+Waterloo,1,6.6,0.0,25.0,20.8,52.5,High Need,True,4,False
+Waterloo,2,4.4,0.0,25.0,0.0,29.4,Adequate,True,4,False
+Waterloo,3,5.9,20.8,25.0,23.4,75.2,High Need,True,4,False
+Waterloo,4,4.4,25.0,25.0,0.0,54.4,High Need,True,4,False
+Waterloo,5,3.7,25.0,25.0,12.5,66.2,High Need,True,4,False
+Waterloo,6,5.9,25.0,8.4,15.6,54.9,High Need,False,4,False
+Waterloo,7,11.0,25.0,25.0,4.2,65.2,High Need,False,4,False
+Waterloo,8,9.6,0.0,6.1,0.0,15.6,Adequate,False,4,False
+Waterloo,9,20.6,25.0,5.0,2.2,52.8,High Need,False,4,False
+Waterloo,10,10.3,23.8,5.0,4.5,43.6,Adequate,False,4,False
+Waterloo,11,17.6,25.0,5.0,7.8,55.5,High Need,False,4,False
+Waterloo,12,18.4,25.0,0.0,5.0,48.4,Adequate,False,4,False
+Waterloo,13,11.0,22.2,5.0,0.0,38.3,Adequate,False,4,False
+Waterloo,14,17.6,25.0,1.4,7.8,51.9,High Need,False,4,False
+Waterloo,15,21.3,25.0,2.7,8.6,57.7,High Need,False,4,False
+Waterloo,16,25.0,25.0,0.7,9.2,59.9,High Need,False,4,False
+Waterloo,17,14.7,25.0,3.2,0.0,42.9,Adequate,False,4,False
+Waterloo,18,24.3,25.0,7.3,9.5,66.1,High Need,False,4,False
+Waterloo,19,11.0,25.0,6.8,12.5,55.3,High Need,False,4,False
+Waterloo,20,13.2,25.0,6.9,6.9,52.1,High Need,False,4,False
+Waterloo,21,9.6,25.0,6.7,9.6,50.9,High Need,False,4,False
+Waterloo,22,10.3,25.0,24.6,22.3,82.2,High Need,True,4,False
+Waterloo,23,12.5,19.6,25.0,18.4,75.5,High Need,True,4,False
+Ixonia,0,5.3,0.0,25.0,25.0,55.3,High Need,True,2,False
+Ixonia,1,9.2,0.0,25.0,25.0,59.2,High Need,True,2,False
+Ixonia,2,6.6,0.0,25.0,25.0,56.6,High Need,True,2,False
+Ixonia,3,6.6,0.0,25.0,25.0,56.6,High Need,True,2,False
+Ixonia,4,5.3,0.0,25.0,25.0,55.3,High Need,True,2,False
+Ixonia,5,7.9,25.0,25.0,0.0,57.9,High Need,True,2,False
+Ixonia,6,13.2,25.0,25.0,25.0,88.2,High Need,False,2,False
+Ixonia,7,15.8,13.9,5.0,25.0,59.7,High Need,False,2,False
+Ixonia,8,17.1,0.0,5.0,25.0,47.1,Adequate,False,2,False
+Ixonia,9,13.2,0.0,5.0,12.5,30.7,Adequate,False,2,False
+Ixonia,10,22.4,19.6,5.0,25.0,72.0,High Need,False,2,False
+Ixonia,11,22.4,19.6,10.0,25.0,77.0,High Need,False,2,False
+Ixonia,12,21.1,10.4,5.0,25.0,61.5,High Need,False,2,False
+Ixonia,13,17.1,0.0,5.0,25.0,47.1,Adequate,False,2,False
+Ixonia,14,10.5,25.0,25.0,15.6,76.2,High Need,False,2,False
+Ixonia,15,19.7,22.2,5.0,25.0,72.0,High Need,False,2,False
+Ixonia,16,22.4,9.8,5.0,25.0,62.2,High Need,False,2,False
+Ixonia,17,25.0,25.0,22.7,25.0,97.7,High Need,False,2,False
+Ixonia,18,19.7,25.0,9.4,20.8,75.0,High Need,False,2,False
+Ixonia,19,13.2,25.0,25.0,25.0,88.2,High Need,False,2,False
+Ixonia,20,14.5,25.0,25.0,22.7,87.2,High Need,False,2,False
+Ixonia,21,13.2,25.0,15.8,18.7,72.7,High Need,False,2,False
+Ixonia,22,10.5,20.8,25.0,25.0,81.4,High Need,True,2,False
+Ixonia,23,10.5,0.0,5.8,15.6,32.0,Adequate,True,2,False
+Palmyra,0,5.0,0.0,25.0,0.0,30.0,Adequate,True,0,False
+Palmyra,1,10.0,0.0,22.7,0.0,32.7,Adequate,True,0,False
+Palmyra,2,10.0,0.0,25.0,0.0,35.0,Adequate,True,0,False
+Palmyra,3,0.0,0.0,12.5,0.0,12.5,Low Need,True,0,False
+Palmyra,4,0.0,0.0,12.5,0.0,12.5,Low Need,True,0,False
+Palmyra,5,5.0,0.0,22.7,0.0,27.7,Adequate,True,0,False
+Palmyra,6,5.0,0.0,25.0,0.0,30.0,Adequate,False,0,False
+Palmyra,7,5.0,0.0,14.4,0.0,19.4,Adequate,False,0,False
+Palmyra,8,0.0,0.0,12.5,0.0,12.5,Adequate,False,0,False
+Palmyra,9,0.0,0.0,12.5,0.0,12.5,Adequate,False,0,False
+Palmyra,10,10.0,0.0,5.0,0.0,15.0,Adequate,False,0,False
+Palmyra,11,25.0,0.0,5.0,0.0,30.0,Adequate,False,0,False
+Palmyra,12,15.0,0.0,17.1,0.0,32.1,Adequate,False,0,False
+Palmyra,13,5.0,0.0,22.7,0.0,27.7,Adequate,False,0,False
+Palmyra,14,5.0,0.0,5.0,0.0,10.0,Adequate,False,0,False
+Palmyra,15,10.0,0.0,5.0,0.0,15.0,Adequate,False,0,False
+Palmyra,16,10.0,0.0,5.0,0.0,15.0,Adequate,False,0,False
+Palmyra,17,10.0,0.0,1.9,0.0,11.9,Adequate,False,0,False
+Palmyra,18,10.0,0.0,14.4,0.0,24.4,Adequate,False,0,False
+Palmyra,19,15.0,0.0,6.0,0.0,21.0,Adequate,False,0,False
+Palmyra,20,0.0,0.0,12.5,0.0,12.5,Adequate,False,0,False
+Palmyra,21,0.0,0.0,12.5,0.0,12.5,Adequate,False,0,False
+Palmyra,22,0.0,0.0,12.5,0.0,12.5,Low Need,True,0,False
+Palmyra,23,5.0,0.0,5.0,0.0,10.0,Low Need,True,0,False
+Cambridge,0,4.2,0.0,5.0,0.0,9.2,Low Need,True,0,False
+Cambridge,1,8.3,0.0,25.0,0.0,33.3,Adequate,True,0,False
+Cambridge,2,12.5,0.0,17.4,0.0,29.9,Adequate,True,0,False
+Cambridge,3,4.2,0.0,17.4,0.0,21.5,Adequate,True,0,False
+Cambridge,4,8.3,0.0,17.4,0.0,25.7,Adequate,True,0,False
+Cambridge,5,8.3,0.0,5.0,0.0,13.3,Low Need,True,0,False
+Cambridge,6,4.2,0.0,17.4,0.0,21.5,Adequate,False,0,False
+Cambridge,7,4.2,0.0,9.0,0.0,13.2,Adequate,False,0,False
+Cambridge,8,20.8,0.0,9.0,0.0,29.9,Adequate,False,0,False
+Cambridge,9,16.7,0.0,6.9,0.0,23.6,Adequate,False,0,False
+Cambridge,10,8.3,0.0,0.7,0.0,9.0,Adequate,False,0,False
+Cambridge,11,20.8,0.0,5.0,0.0,25.8,Adequate,False,0,False
+Cambridge,12,25.0,0.0,5.0,0.0,30.0,Adequate,False,0,False
+Cambridge,13,4.2,0.0,25.0,0.0,29.2,Adequate,False,0,False
+Cambridge,14,4.2,0.0,17.4,0.0,21.5,Adequate,False,0,False
+Cambridge,15,8.3,0.0,5.0,0.0,13.3,Adequate,False,0,False
+Cambridge,16,20.8,25.0,10.7,0.0,56.5,High Need,False,0,False
+Cambridge,17,20.8,0.0,5.0,0.0,25.8,Adequate,False,0,False
+Cambridge,18,12.5,0.0,5.0,0.0,17.5,Adequate,False,0,False
+Cambridge,19,16.7,25.0,13.2,0.0,54.9,High Need,False,0,False
+Cambridge,20,16.7,0.0,2.8,0.0,19.4,Adequate,False,0,False
+Cambridge,21,4.2,0.0,17.4,0.0,21.5,Adequate,False,0,False
+Cambridge,22,12.5,0.0,5.0,0.0,17.5,Low Need,True,0,False
+Cambridge,23,0.0,0.0,12.5,0.0,12.5,Low Need,True,0,False

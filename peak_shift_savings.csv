@@ -1,0 +1,5 @@
+Department,FT_Staff,PT_Staff,Current_Model,Proposed_Model,Overnight_FTE_Freed,Night_Diff_Savings,On_Call_Savings,OT_Savings,Total_Savings,Peak_Calls_Covered,Night_Calls_Yr,Night_Calls_Per_Day
+Waterloo,4,22,3 shifts (24/7),12-hr peak (09-21) + Vol/PT overnight,1.3,11163,58400,400,69963,343,83,0.28
+Johnson Creek,3,33,3 shifts (24/7),12-hr peak (09-21) + Vol/PT overnight,1.0,8372,43800,300,52472,321,77,0.21
+Ixonia,2,45,2 shifts,12-hr peak (09-21) + Vol/PT overnight,1.0,8372,58400,200,66972,190,46,0.13
+Jefferson,6,20,3 shifts (24/7),12-hr peak (09-21) + Vol/PT overnight,2.0,16745,43800,600,61145,961,233,0.76

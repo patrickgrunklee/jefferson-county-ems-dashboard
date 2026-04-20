@@ -1,0 +1,20 @@
+Source,Median_Sec_RT,P90_Sec_RT,Mean_Sec_RT,N_Secondary
+"Current (NFIRS, real)",6.0,12.0,6.8,1268
+Proposed K=2 (coarse_legacy),18.31,45.59,21.64,3088
+Proposed K=3 (coarse_legacy),12.7,29.1,14.9,3088
+Proposed K=4 (coarse_legacy),6.34,23.62,12.01,3088
+Proposed K=5 (coarse_legacy),6.34,19.93,10.6,3088
+Proposed K=6 (coarse_legacy),6.34,19.5,9.51,3088
+Proposed K=8 (coarse_legacy),6.34,19.5,8.8,3088
+Proposed K=2 (fine_realistic),18.59,50.5,22.7,3088
+Proposed K=3 (fine_realistic),14.07,34.34,16.06,3088
+Proposed K=4 (fine_realistic),8.54,28.14,13.01,3088
+Proposed K=5 (fine_realistic),6.24,27.03,11.71,3088
+Proposed K=6 (fine_realistic),5.6,24.18,10.04,3088
+Proposed K=8 (fine_realistic),5.04,22.69,9.04,3088
+Proposed K=2 (fine_controlled),17.8,47.85,21.51,3088
+Proposed K=3 (fine_controlled),13.78,29.91,14.74,3088
+Proposed K=4 (fine_controlled),3.83,24.3,11.74,3088
+Proposed K=5 (fine_controlled),3.83,24.3,10.48,3088
+Proposed K=6 (fine_controlled),3.48,20.66,8.73,3088
+Proposed K=8 (fine_controlled),3.48,20.66,7.7,3088

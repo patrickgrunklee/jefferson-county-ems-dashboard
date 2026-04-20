@@ -1,0 +1,13 @@
+Department,FT_Staff,PT_Staff,Service_Level,Day_Coverage,Afternoon_Coverage,Overnight_Coverage,ALS_at_Night,Night_Model,Night_RT_min,Day_RT_min,RT_Delta_min,Night_ALS_Pct,Night_Calls_Year
+Western Lakes,0,0,ALS,Career ALS,Career ALS,Career ALS,Yes,Multi-county career,7.9,6.5,1.4,19.1,901.28
+Edgerton,24,0,ALS,Career ALS,Career ALS,Career ALS,Yes,24/7 Career,8.3,6.5,1.8,48.6,342.08
+Watertown,31,3,ALS,Career ALS,Career ALS,Career ALS,Yes,24/7 Career,7.1,5.6,1.5,46.8,321.92
+Fort Atkinson,16,28,ALS,Career ALS,Career ALS,Career ALS,Yes,24/7 Career,5.3,4.2,1.1,48.0,258.56
+Jefferson,6,20,ALS,Career ALS,Career+PT ALS,FT+PT ALS,Yes (reduced),FT+PT rotation,7.9,6.4,1.5,0.0,233.12
+Whitewater,15,17,ALS,Career ALS,Career ALS,Career ALS,Yes,24/7 Career,7.0,5.2,1.8,30.0,10.24
+Waterloo,4,22,AEMT,Career AEMT,Career+Vol AEMT,Volunteer only,NO,Volunteer page-out,10.6,6.2,4.4,30.7,83.2
+Lake Mills,4,20,BLS,Ryan Bros ALS,Ryan Bros ALS,On-call,Uncertain,Private contractor,,,,,82.88
+Johnson Creek,3,33,ALS,Career ALS,FT+PT ALS,PT on-call ALS,Yes (on-call),Paramedic on-call,9.7,6.7,3.0,41.6,77.92
+Ixonia,2,45,BLS,FT BLS,Vol BLS,Volunteer BLS,N/A (BLS),Volunteer page-out,15.3,8.9,6.4,48.9,46.24
+Cambridge,0,31,ALS,Volunteer ALS,Volunteer ALS,Volunteer only,Uncertain,Volunteer page-out,7.9,7.6,0.3,0.0,13.92
+Palmyra,0,20,BLS,Volunteer BLS,Volunteer BLS,Volunteer BLS,N/A (BLS),Volunteer page-out,11.0,5.5,5.5,0.0,5.12

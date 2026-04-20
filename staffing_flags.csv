@@ -1,0 +1,6 @@
+Dept,Hour,Freq_Score,Conc_Score,RT_Score,ALS_Score,Composite,Flag,Is_Night,FT_Staff,Has_24_7
+Jefferson,0,0.0,0.0,12.5,0.0,12.5,OVERSTAFFED,True,6,True
+Jefferson,1,2.1,0.0,5.0,0.0,7.1,OVERSTAFFED,True,6,True
+Jefferson,2,0.0,0.0,12.5,0.0,12.5,OVERSTAFFED,True,6,True
+Jefferson,4,4.2,0.0,5.0,0.0,9.2,OVERSTAFFED,True,6,True
+Jefferson,22,6.2,0.0,10.1,0.0,16.4,OVERSTAFFED,True,6,True

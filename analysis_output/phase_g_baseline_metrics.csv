@@ -1,0 +1,2 @@
+System,Stations,Ambulances,Avg_RT_Min,Median_RT_Min,P90_RT_Min,Max_RT_Min,Coverage_8min_Pct,Coverage_10min_Pct,Coverage_14min_Pct,Coverage_20min_Pct,Total_FTE,Total_Annual_Cost
+Current (13 stations),13,20,7.47,7.05,12.72,18.66,64.9,78.1,94.1,100.0,198.5,13196149

@@ -1,0 +1,4 @@
+Scenario,K,Total_FTE,Total_Operating,Total_Revenue,Net_Cost,Coverage_Hours,P_Wait_Peak,vs_Current_FTE,vs_Current_Cost
+A: All 10 units 24/7 ALS,10,72.0,7168180,4662000,2506180,24/7,0.0,26.5,391672
+B: All 10 units peak-only (08-20) ALS,10,48.0,5158787,3030300,2128487,08:00-20:00,0.0,2.5,13979
+C: 1x24/7 + 9x peak-only ALS,10,50.4,5359726,3193470,2166256,"1 unit 24/7, 9 peak-only",0.0,4.9,51748

@@ -1,0 +1,12 @@
+Dept,Aid_Given,Aid_Received,Net_Aid,Net_Direction
+Watertown,34,14,20,Net Provider
+Fort Atkinson,8,2,6,Net Provider
+Whitewater,7,14,-7,Net Receiver
+Edgerton,12,8,4,Net Provider
+Jefferson,0,1,-1,Net Receiver
+Johnson Creek,20,25,-5,Net Receiver
+Waterloo,4,28,-24,Net Receiver
+Lake Mills,0,0,0,Balanced
+Ixonia,12,14,-2,Net Receiver
+Palmyra,0,5,-5,Net Receiver
+Cambridge,0,0,0,Balanced

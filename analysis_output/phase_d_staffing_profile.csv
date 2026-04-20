@@ -1,0 +1,10 @@
+Dept,Staffing_Model,ALS_Level,FT_Staff,PT_Staff,FTE_Equiv,Ambulances,EMS_Calls_2024,Annual_Expense,Population_Served,Secondary_Events,Calls_Per_FTE,FTE_Per_Ambulance,Cost_Per_Call,Cost_Per_Capita,Peak_Utilization_Pct
+Watertown,Career 24/7,ALS,31,3,32.5,3,1945,3833800,23000,656,59.8,10.8,1971,167,6.9
+Fort Atkinson,Career + PT,ALS,16,28,30.0,3,1618,760950,16300,209,53.9,10.0,470,47,2.8
+Whitewater,Career + PT,ALS,15,17,23.5,2,1448,2710609,4296,421,61.6,11.8,1872,631,8.7
+Edgerton,Career,ALS,24,0,24.0,2,2033,704977,3763,768,84.7,12.0,347,187,15.2
+Jefferson,Career + PT,ALS,6,20,16.0,3,91,1500300,7800,2,5.7,5.3,16487,192,0.2
+Johnson Creek,Combination (FT+PT),ALS,3,40,23.0,2,454,1134154,3367,59,19.7,11.5,2498,337,3.2
+Waterloo,Career + Volunteer,AEMT,4,22,15.0,2,398,1102475,4415,93,26.5,7.5,2770,250,4.3
+Ixonia,Volunteer + FT chiefs,BLS,2,45,24.5,1,258,631144,5078,32,10.5,24.5,2446,124,4.2
+Palmyra,Volunteer,BLS,0,20,10.0,1,32,817740,3341,0,3.2,10.0,25554,245,4.5

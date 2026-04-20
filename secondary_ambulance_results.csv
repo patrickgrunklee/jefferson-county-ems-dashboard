@@ -1,0 +1,14 @@
+k,Selected_Sites,Avg_Weighted_RT_Min,Median_RT_Min,Max_RT_Min,Pct_Pop_8min,Pct_Pop_10min,Pct_Pop_12min,Pct_Pop_14min,Pct_Pop_15min,Pct_Pop_20min
+1,Sullivan,20.7,18.95,47.77,3.3,4.6,6.3,20.9,27.7,52.5
+2,"Waterloo, Watertown",15.16,13.35,37.47,31.6,38.3,40.6,45.6,49.9,65.0
+3,"Sullivan, Waterloo, Watertown",13.08,11.77,37.47,34.9,42.8,46.9,61.6,63.3,79.2
+4,"Edgerton, Helenville, Waterloo, Watertown",11.73,9.66,32.47,39.7,48.3,51.7,60.4,68.0,85.3
+5,"Fort Atkinson, Helenville, Johnson Creek, Waterloo, Watertown",10.61,7.88,25.33,48.7,56.4,60.8,70.1,72.1,84.7
+6,"Fort Atkinson, Helenville, Jefferson, Johnson Creek, Waterloo, Watertown",9.77,7.88,25.33,48.7,56.4,62.2,76.8,78.8,93.1
+7,"Fort Atkinson, Helenville, Jefferson, Johnson Creek, Rome, Waterloo, Watertown",8.95,7.65,20.82,52.9,60.5,66.4,81.0,83.0,98.5
+8,"Fort Atkinson, Helenville, Jefferson, Johnson Creek, Rome, Sullivan, Waterloo, Watertown",8.59,7.22,20.82,56.2,63.9,68.1,81.0,83.0,98.5
+9,"Edgerton, Fort Atkinson, Helenville, Jefferson, Johnson Creek, Rome, Sullivan, Waterloo, Watertown",8.26,7.09,18.66,58.3,65.9,71.2,84.7,84.7,100.0
+10,"Edgerton, Fort Atkinson, Helenville, Ixonia, Jefferson, Johnson Creek, Rome, Sullivan, Waterloo, Watertown",7.94,7.05,18.66,62.1,69.8,75.0,88.5,88.5,100.0
+11,"Edgerton, Fort Atkinson, Helenville, Ixonia, Jefferson, Johnson Creek, Palmyra, Rome, Sullivan, Waterloo, Watertown",7.71,6.61,18.66,63.9,71.5,77.9,91.5,91.5,100.0
+12,"Cambridge, Edgerton, Fort Atkinson, Helenville, Ixonia, Jefferson, Johnson Creek, Palmyra, Rome, Sullivan, Waterloo, Watertown",7.61,6.61,18.66,63.9,73.1,79.5,93.0,93.0,100.0
+13,"Cambridge, Edgerton, Fort Atkinson, Helenville, Ixonia, Jefferson, Johnson Creek, Palmyra, Rome, Ryan Brothers, Sullivan, Waterloo, Watertown",7.61,6.61,18.66,63.9,73.1,79.5,93.0,93.0,100.0

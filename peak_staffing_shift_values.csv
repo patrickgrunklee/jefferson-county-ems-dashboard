@@ -1,0 +1,19 @@
+Dept,Shift,Marginal_Value,Avg_Delta_P,Annual_Calls_Shift
+Edgerton,Day (08-20),0.150806,0.03941,1355.0
+Whitewater,Day (08-20),0.03122,0.012776,878.0
+Edgerton,Night (20-08),0.025506,0.011825,680.0
+Ixonia,Day (08-20),0.021725,0.04433,170.0
+Whitewater,Night (20-08),0.0104,0.005918,570.0
+Ixonia,Night (20-08),0.006574,0.023709,90.0
+Watertown,Day (08-20),0.005291,0.001487,1263.0
+Waterloo,Day (08-20),0.003759,0.004271,274.0
+Johnson Creek,Day (08-20),0.001966,0.002243,300.0
+Watertown,Night (20-08),0.000945,0.000353,684.0
+Palmyra,Day (08-20),0.000742,0.007991,23.0
+Waterloo,Night (20-08),0.000476,0.001045,129.0
+Johnson Creek,Night (20-08),0.000425,0.000717,154.0
+Fort Atkinson,Day (08-20),0.000294,9.7e-05,1069.0
+Palmyra,Night (20-08),0.000148,0.003136,9.0
+Fort Atkinson,Night (20-08),3.9e-05,1.9e-05,552.0
+Jefferson,Night (20-08),0.0,0.0,22.0
+Jefferson,Day (08-20),0.0,0.0,69.0

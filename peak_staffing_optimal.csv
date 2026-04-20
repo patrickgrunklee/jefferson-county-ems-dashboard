@@ -1,0 +1,6 @@
+N_EMTs,Total_Marginal_Value,Assignments
+1,0.1508,"Edgerton Day (08-20) (value=0.1508, ~1355 calls/yr in shift)"
+2,0.182,"Edgerton Day (08-20) (value=0.1508, ~1355 calls/yr in shift); Whitewater Day (08-20) (value=0.0312, ~878 calls/yr in shift)"
+3,0.2075,"Edgerton Day (08-20) (value=0.1508, ~1355 calls/yr in shift); Whitewater Day (08-20) (value=0.0312, ~878 calls/yr in shift); Edgerton Night (20-08) (value=0.0255, ~680 calls/yr in shift)"
+4,0.2293,"Edgerton Day (08-20) (value=0.1508, ~1355 calls/yr in shift); Whitewater Day (08-20) (value=0.0312, ~878 calls/yr in shift); Edgerton Night (20-08) (value=0.0255, ~680 calls/yr in shift); Ixonia Day (08-20) (value=0.0217, ~170 calls/yr in shift)"
+5,0.2397,"Edgerton Day (08-20) (value=0.1508, ~1355 calls/yr in shift); Whitewater Day (08-20) (value=0.0312, ~878 calls/yr in shift); Edgerton Night (20-08) (value=0.0255, ~680 calls/yr in shift); Ixonia Day (08-20) (value=0.0217, ~170 calls/yr in shift); Whitewater Night (20-08) (value=0.0104, ~570 calls/yr in shift)"

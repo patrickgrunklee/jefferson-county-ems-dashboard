@@ -37,3 +37,69 @@ MABAS_Assets/
 
 # Isochrone API cache
 isochrone_cache/
+
+# Geocode cache (auto-generated)
+.cache/
+
+# ── Sensitive / confidential documents (local only, not for public repo) ──
+# Signed contracts, IGAs, amendments
+*Contract*.txt
+*CONTRACT*.txt
+*contract*.txt
+*Agreement*.txt
+*AGREEMENT*.txt
+*agreement*.txt
+*IGA*.txt
+*Amendment*.txt
+*Signed*.txt
+*SIGNED*.txt
+Copy_of_JCFD*.txt
+EFPD_*.txt
+FA_Ambulance_*.txt
+Jefferson Ambulance*.txt
+Lake_Mills_Aztalan_*.txt
+Town_of_*.txt
+Town of *.txt
+Waterloo fire*.txt
+Watertown fire*.txt
+IGA *.txt
+
+# Session logs, chat transcripts, meeting notes
+Chat_Log_*.md
+session_log_*.md
+Role_*.md
+fixes.txt
+[0-9]*.[0-9]*.[0-9]*.txt
+[0-9][0-9]-*.txt
+
+# Office docs (contracts, meeting minutes, presentations)
+*.docx
+*.pdf
+*.pptx
+
+# ── Large source data dumps (not needed to run dashboard) ──
+*.zip
+Data from Providers/
+EMS Budgets/
+new3.31.26/
+ems_data4.5.26/
+
+# Source data xlsx that isn't a derived KPI output
+Emergency Services Population*.xlsx
+
+# Reference images
+Copy of Map of Jefferson County EMS Districts .jpg
+
+# PowerBI binaries (large, not needed by Python dashboard)
+powerbi/
+*.pbix
+
+# Other large/reference folders
+ISyE Project/Background/
+ISyE Project/temp_pdf_images/
+ISyE Project/Data and Resources/Examples of Countywide EMS Systems/
+
+# Databases (regenerable from source data)
+*.db
+ems_db/
+research_documents.db

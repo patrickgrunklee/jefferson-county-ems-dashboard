@@ -1,0 +1,7 @@
+Scenario,Response_Time_Min,Stations_Needed,Coverage_Pct,Open_Stations,Closed_Stations
+A_Existing,8,12,24.5,"Watertown, Fort Atkinson, Whitewater, Jefferson, Johnson Creek, Waterloo, Lake Mills, Ixonia, Palmyra, Cambridge, Helenville, Western Lakes",Edgerton
+A_Existing,10,13,40.2,"Watertown, Fort Atkinson, Whitewater, Edgerton, Jefferson, Johnson Creek, Waterloo, Lake Mills, Ixonia, Palmyra, Cambridge, Helenville, Western Lakes",
+A_Existing,12,13,56.4,"Watertown, Fort Atkinson, Whitewater, Edgerton, Jefferson, Johnson Creek, Waterloo, Lake Mills, Ixonia, Palmyra, Cambridge, Helenville, Western Lakes",
+A_Existing,14,13,68.9,"Watertown, Fort Atkinson, Whitewater, Edgerton, Jefferson, Johnson Creek, Waterloo, Lake Mills, Ixonia, Palmyra, Cambridge, Helenville, Western Lakes",
+A_Existing,16,12,79.1,"Watertown, Fort Atkinson, Whitewater, Edgerton, Johnson Creek, Waterloo, Lake Mills, Ixonia, Palmyra, Cambridge, Helenville, Western Lakes",Jefferson
+A_Existing,20,10,91.5,"Watertown, Fort Atkinson, Edgerton, Johnson Creek, Waterloo, Lake Mills, Ixonia, Palmyra, Cambridge, Western Lakes","Whitewater, Jefferson, Helenville"
