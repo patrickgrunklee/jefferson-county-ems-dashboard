@@ -331,7 +331,7 @@ _dept_inc_type = raw.groupby(["Department", "Incident Type Code Category Descrip
 _dept_aid = raw.groupby(["Department", "Aid Given or Received Description"]).size().reset_index(name="Calls")
 
 # ── Computed globals for dynamic KPI cards ────────────────────────────────────
-_total_ems_calls = _AUTH_COUNTY_TOTAL           # Authoritative total: 14,853
+_total_ems_calls = _AUTH_COUNTY_TOTAL           # Authoritative total: 8,396 (corrected 2026-04-19)
 _avg_rt          = f"{rt_clean['RT'].mean():.1f} min"
 _med_rt          = f"{rt_clean['RT'].median():.1f} min"
 _n_depts         = len(AUTH_EMS_CALLS)          # 12 EMS-providing communities
@@ -487,7 +487,7 @@ PROVIDER_CALL_SUMMARY = pd.DataFrame([
      "Care_Level": "ALS Ground Transport", "Has_RT": "No", "Source_File": "Edgerton EMS_Incidents.csv"},
     {"Department": "Jefferson",           "Records": 1457, "Data_Fields": "Date, Dispatch/Enroute/Arrival, City, Township",
      "Care_Level": "Mixed (ALS primary)", "Has_RT": "Yes", "Source_File": "Jefferson Fire Dept 2024 EMS Call Data.xlsx"},
-    {"Department": "Johnson Creek",       "Records": 487, "Data_Fields": "Date, Address, Type, Zone, Dispatch-Arrival, Mode",
+    {"Department": "Johnson Creek",       "Records": 1090, "Data_Fields": "Date, Address, Type, Zone, Dispatch-Arrival, Mode",
      "Care_Level": "Mixed EMS types", "Has_RT": "Yes", "Source_File": "Johnson Creek EMS Data 2024.csv"},
     {"Department": "Lake Mills (Ryan Bros)", "Records": 518, "Data_Fields": "Date, Dispatch/Enroute, Address, Service Type, Care Level",
      "Care_Level": "ALS-Paramedic", "Has_RT": "Yes", "Source_File": "Lake Mills Ryan Bros EMS Data 2024.csv"},
@@ -681,8 +681,8 @@ ASSET_DATA = pd.DataFrame([
      "Ambulance_Detail": "Units 703, 704 (details not filed in MABAS sheet)",
      "EMS_Personnel": 0, "Paramedics": 0, "AEMTs": 0, "EMTs": 0, "EMRs": 0,
      "Source_File": "Johnson Creek MABAS DIV 118 FD Resource List (Autosaved) 2016.xlsx"},
-    {"Municipality": "Lake Mills",    "Engines": 3, "Trucks_Ladders": 1, "Squads_Rescues": 1, "Tenders": 1, "Brush_ATV": 1, "Boats": 2, "Ambulances": 3,
-     "Ambulance_Detail": "Units 712, 713, 714 (details not filed in MABAS sheet)",
+    {"Municipality": "Lake Mills",    "Engines": 3, "Trucks_Ladders": 1, "Squads_Rescues": 1, "Tenders": 1, "Brush_ATV": 1, "Boats": 2, "Ambulances": 0,
+     "Ambulance_Detail": "No LMFD ambulances — Ryan Brothers EMS provides ALS transport under contract",
      "EMS_Personnel": 19, "Paramedics": 1, "AEMTs": 2, "EMTs": 12, "EMRs": 4,
      "Source_File": "Lake Mills 2020 MABAS INFO.xlsx"},
     {"Municipality": "Palmyra",       "Engines": 1, "Trucks_Ladders": 1, "Squads_Rescues": 0, "Tenders": 1, "Brush_ATV": 1, "Boats": 0, "Ambulances": 1,
@@ -701,8 +701,8 @@ ASSET_DATA = pd.DataFrame([
      "Ambulance_Detail": "2 units est. Jefferson-stationed (Sullivan/Concord area) — pending Peterson/Wegner callaround 2026-04-21. Full district fleet larger (HQ in Oconomowoc, Waukesha Co.)",
      "EMS_Personnel": 0, "Paramedics": 0, "AEMTs": 0, "EMTs": 0, "EMRs": 0,
      "Source_File": "Western Lakes MABAS DIV 118 FD Resource List.xlsx"},
-    {"Municipality": "Whitewater",    "Engines": 3, "Trucks_Ladders": 1, "Squads_Rescues": 1, "Tenders": 2, "Brush_ATV": 2, "Boats": 0, "Ambulances": 4,
-     "Ambulance_Detail": "4 ambulances based in Whitewater city (Walworth Co.) — Jefferson Co. contracts (Koshkonong/Cold Spring) served by response from Whitewater, not a Jefferson-stationed unit",
+    {"Municipality": "Whitewater",    "Engines": 3, "Trucks_Ladders": 1, "Squads_Rescues": 1, "Tenders": 2, "Brush_ATV": 2, "Boats": 0, "Ambulances": 1,
+     "Ambulance_Detail": "4 total ambulances but assumption: 1 serves Jefferson Co. contracts (Koshkonong/Cold Spring); remaining 3 based in Walworth Co.",
      "EMS_Personnel": 50, "Paramedics": 0, "AEMTs": 30, "EMTs": 20, "EMRs": 0,
      "Source_File": "Whitewater MABAS DIV 118 FD Resource List-WW.xlsx"},
 ])
@@ -2109,7 +2109,7 @@ _df_transition_roadmap = pd.DataFrame([
     {
         "Window":            "Near-term",
         "Timeline":          "0–6 months (Spring 2026)",
-        "Observable Opportunity": "Fort Atkinson contracts expired Dec 31, 2025 — county-wide clause enables renegotiation; Palmyra transport at $5,841/call on 140 est. calls/yr",
+        "Observable Opportunity": "Fort Atkinson contracts expired Dec 31, 2025 — county-wide clause enables renegotiation; Palmyra transport at $5,841/call on 32 calls/yr (2024 authoritative)",
         "Key Departments":   "Fort Atkinson, Palmyra",
         "Scale of Identified Inefficiency": "$491K–$572K (Palmyra fixed-cost transport below viability threshold)",
         "Structural Context":      "FA contracts already expired; county-wide clause triggers on county resolution",
@@ -2696,7 +2696,7 @@ def render_tab(tab):
                         "fontSize": "11px", "color": C_TEXT}),
                 ], style={"position": "relative"}),
                 _source_citation(
-                    "2024 NFIRS — 14 department Excel files (ISyE Project/Data and Resources/Call Data/)",
+                    "2024 NFIRS — 14 department Excel files (ISyE Project/Data and Resources/Call Data/) + Megan 2026-04-19 geo corrections",
                     "jefferson_county.geojson (Census TIGER 2023 boundaries)",
                     "EMS district boundaries: Jefferson County GIS / ArcGIS Public Safety (authoritative — fire districts differ)",
                     "FY2025 municipal budget documents (station locations & staffing)",
@@ -2715,7 +2715,7 @@ def render_tab(tab):
                     style_data_conditional=_DT_STYLE_DATA_CONDITIONAL_BASE,
                     page_size=20),
                 _source_citation(
-                    "2024 NFIRS — 14 department Excel files (ISyE Project/Data and Resources/Call Data/)",
+                    "2024 NFIRS — 14 department Excel files (ISyE Project/Data and Resources/Call Data/) + Megan 2026-04-19 geo corrections",
                     "county_ems_comparison_data.xlsx — Jeff_Municipal_Breakdown sheet",
                 ),
             ], style=CARD),
@@ -2728,13 +2728,13 @@ def render_tab(tab):
                 # Row 1: EMS call volume — full width so all depts are readable
                 dcc.Graph(id="vol-bar"),
                 # Row 2: population-normalized — full width; Western Lakes bar is capped for readability
-                _sub_header("EMS Calls per 1,000 Population (Western Lakes bar capped — see annotation)"),
+                _sub_header("EMS Calls per 1,000 Population"),
                 dcc.Graph(id="vol-norm-bar"),
                 # Row 3: Cost per EMS call
                 _sub_header("Cost per EMS Call"),
                 dcc.Graph(id="ems-pct-bar"),
                 _source_citation(
-                    "2024 NFIRS — 14 department Excel files (ISyE Project/Data and Resources/Call Data/)",
+                    "2024 NFIRS — 14 department Excel files (ISyE Project/Data and Resources/Call Data/) + Megan 2026-04-19 geo corrections",
                     "Emergency Services Population - Jefferson County.xlsx (WI DOA 2025 — service area populations)",
                     "Call Volumes - Jefferson County EMS.xlsx (authoritative 2024 EMS call counts)",
                     ("WI statewide calls/1K benchmark — Northwestern EMS", "https://northwesternems.org/ems-in-wisconsin"),
@@ -2748,7 +2748,7 @@ def render_tab(tab):
                 ], style={"display": "flex", "gap": "16px"}),
                 dcc.Graph(id="monthly-trend"),
                 _source_citation(
-                    "2024 NFIRS — 14 department Excel files (ISyE Project/Data and Resources/Call Data/)",
+                    "2024 NFIRS — 14 department Excel files (ISyE Project/Data and Resources/Call Data/) + Megan 2026-04-19 geo corrections",
                 ),
             ], style=CARD),
             html.Div([
@@ -2763,7 +2763,7 @@ def render_tab(tab):
                 ),
                 dcc.Graph(id="aid-ratio-bar"),
                 _source_citation(
-                    "2024 NFIRS — 14 department Excel files (ISyE Project/Data and Resources/Call Data/)",
+                    "2024 NFIRS — 14 department Excel files (ISyE Project/Data and Resources/Call Data/) + Megan 2026-04-19 geo corrections",
                 ),
             ], style=CARD),
             html.Div([
@@ -2802,7 +2802,7 @@ def render_tab(tab):
                     dcc.Graph(id="rt-ems-box",            style={"flex": "1"}),
                 ], style={"display": "flex", "gap": "16px"}),
                 _source_citation(
-                    "2024 NFIRS — 14 department Excel files (ISyE Project/Data and Resources/Call Data/)",
+                    "2024 NFIRS — 14 department Excel files (ISyE Project/Data and Resources/Call Data/) + Megan 2026-04-19 geo corrections",
                     "county_ems_comparison_data.xlsx — Jeff_Response_Percentiles sheet",
                     ("NFPA 1710 Standard (Career)", "https://www.emergent.tech/blog/nfpa-1710-response-times"),
                     ("NFPA 1720 Standard (Volunteer)", "https://www.firehouse.com/careers-education/article/21238058/nfpa-standards-nfpa-1720-an-update-on-the-volunteer-deployment-standard"),
@@ -2830,7 +2830,7 @@ def render_tab(tab):
                 html.Div(id="drilldown-high-freq"),
                 html.Div(id="drilldown-data-quality"),
                 _source_citation(
-                    "2024 NFIRS — 14 department Excel files (ISyE Project/Data and Resources/Call Data/)",
+                    "2024 NFIRS — 14 department Excel files (ISyE Project/Data and Resources/Call Data/) + Megan 2026-04-19 geo corrections",
                     "FY2025 municipal budget documents (per-department staffing & financials)",
                     "Looker Studio PDF reports (2024) — ALS/BLS action-type breakdowns, high-frequency addresses",
                 ),
@@ -4179,29 +4179,13 @@ def update_vol(depts, tab):
                 hoverinfo="skip",
             ))
 
-    # Western Lakes is a Waukesha Co. district — its 2,212/1K value represents the full
-    # district, not Jefferson Co. alone (~200-250 actual Jeff Co. calls).  Clip the bar
-    # at a display cap so the other 14 departments are readable on a linear scale, then
-    # annotate the true value directly on the clipped bar.
-    _WL_DISPLAY_CAP = 450   # clip Western Lakes for readability on linear axis
-    _wl_true_val = None
-    if "Western Lakes" in cv_norm["Department"].values:
-        _wl_mask = cv_norm["Department"] == "Western Lakes"
-        _wl_true_val = cv_norm.loc[_wl_mask, "Calls_per_1K"].values[0]
-        if pd.notna(_wl_true_val) and _wl_true_val > _WL_DISPLAY_CAP:
-            x_vals = [min(v, _WL_DISPLAY_CAP) if cv_norm["Department"].iloc[i] == "Western Lakes"
-                      else v for i, v in enumerate(x_vals)]
-            text_labels = [
-                f"→ {int(_wl_true_val):,}/1K (full district; ~200-250 Jeff Co. only)"
-                if row["Department"] == "Western Lakes" and pd.notna(row["Calls_per_1K"])
-                else lbl
-                for lbl, (_, row) in zip(text_labels, cv_norm.iterrows())
-            ]
+    # Western Lakes corrected 2026-04-19: 263 Jefferson-only calls (was 5,633 all-district).
+    # Calls/1K now ~58 — no display cap needed. Cap logic removed.
 
     fig3.update_layout(
         title="EMS Calls per 1,000 Population — 2024<br>"
               "<sup>Linear scale  ·  Color = service level  ·  Dashed = WI avg (254/1K)  ·  "
-              "Western Lakes bar capped — full Waukesha Co. district</sup>",
+              "Jefferson-County calls only (corrected 2026-04-19)</sup>",
         yaxis_title="",
     )
     _apply_chart_style(fig3, height=560, legend_below=True, title_has_subtitle=True)
@@ -4220,12 +4204,12 @@ def update_vol(depts, tab):
         categoryorder="array",
         categoryarray=cv_norm["Department"].tolist(),
     )
-    # Callout annotation for Western Lakes outlier (banner at bottom-right)
+    # Callout annotation: data correction note
     fig3.add_annotation(
         x=0.99, y=0.01, xref="paper", yref="paper",
         text=(
-            "Western Lakes ~2,212/1K = full Waukesha Co. district; "
-            "Jefferson Co. incidents ~200-250 only"
+            "All figures reflect Jefferson-County calls only (corrected 2026-04-19). "
+            "Western Lakes: 263 Jeff Co. calls (~58/1K); prior all-district figure was 5,633."
         ),
         showarrow=False,
         font=dict(size=10, color=C_YELLOW),
