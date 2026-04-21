@@ -31,8 +31,7 @@ name_map = {
     "Jefferson Fire Dept": "Jefferson",
     "Johnson Creek Fire Dept": "Johnson Creek",
     "Palmyra Village Fire Dept": "Palmyra",
-    "Rome Fire Dist": "Rome",
-    "Sullivan Vol Fire Dept": "Sullivan",
+    # Rome and Sullivan are fire-only — not EMS providers, excluded from analysis
     "Waterloo Fire Dept": "Waterloo",
     "Watertown Fire Dept": "Watertown",
     "Western Lake Fire District": "Western Lakes",

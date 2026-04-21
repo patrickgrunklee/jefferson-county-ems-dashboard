@@ -1,0 +1,49 @@
+BG_Lat,BG_Lon,BG_Pop,Secondary_Demand,Nearest_Primary,Assigned_Secondary,Secondary_RT_Min
+43.0744,-88.7825,2840,49.8,Johnson Creek,SEC-2 (Central),11.8
+43.1756,-88.9796,1917,39.5,Waterloo,SEC-3 (North),6.0
+43.1911,-89.001,1622,33.4,Waterloo,SEC-3 (North),6.7
+42.9276,-88.8712,2539,31.3,Fort Atkinson,SEC-1 (South),7.4
+43.1211,-88.7255,1434,25.1,Johnson Creek,SEC-2 (Central),13.6
+42.9573,-88.8343,1867,23.0,Fort Atkinson,SEC-1 (South),7.6
+43.1514,-88.9314,1083,22.3,Waterloo,SEC-3 (North),17.6
+42.873,-88.8002,1678,20.7,Fort Atkinson,SEC-1 (South),16.0
+42.9124,-88.8567,1648,20.3,Fort Atkinson,SEC-1 (South),11.1
+42.9142,-88.8311,1437,17.7,Fort Atkinson,SEC-1 (South),10.4
+43.1875,-88.7494,2076,17.4,Watertown,SEC-2 (Central),10.1
+42.8841,-88.8943,1211,14.9,Fort Atkinson,SEC-1 (South),13.9
+43.1599,-88.7221,1612,13.5,Watertown,SEC-2 (Central),12.1
+42.9557,-88.8222,1043,12.9,Fort Atkinson,SEC-1 (South),7.7
+43.1932,-88.7295,1478,12.4,Watertown,SEC-2 (Central),8.6
+42.9224,-88.8415,985,12.1,Fort Atkinson,SEC-1 (South),8.0
+42.9823,-88.8859,967,11.9,Fort Atkinson,SEC-1 (South),8.0
+42.9433,-88.8583,882,10.9,Fort Atkinson,SEC-1 (South),5.1
+43.1485,-88.8347,1299,10.9,Watertown,SEC-2 (Central),11.3
+43.1899,-88.7143,1160,9.7,Watertown,SEC-2 (Central),10.5
+43.1854,-88.6991,1127,9.5,Watertown,SEC-2 (Central),13.7
+42.9249,-88.8327,761,9.4,Fort Atkinson,SEC-1 (South),9.0
+42.9289,-88.8285,735,9.1,Fort Atkinson,SEC-1 (South),7.5
+42.9315,-88.8415,729,9.0,Fort Atkinson,SEC-1 (South),5.9
+42.915,-88.842,722,8.9,Fort Atkinson,SEC-1 (South),10.2
+43.1288,-88.6208,2054,8.5,Ixonia,SEC-2 (Central),31.6
+43.1934,-88.6986,926,7.8,Watertown,SEC-2 (Central),14.2
+43.1778,-88.7284,908,7.6,Watertown,SEC-2 (Central),10.5
+43.1861,-88.7109,911,7.6,Watertown,SEC-2 (Central),11.3
+43.1924,-88.7527,880,7.4,Watertown,SEC-2 (Central),9.5
+43.1935,-88.7127,866,7.3,Watertown,SEC-2 (Central),11.2
+43.1915,-88.72,862,7.2,Watertown,SEC-2 (Central),10.6
+43.1664,-88.6975,820,6.9,Watertown,SEC-2 (Central),14.5
+43.1682,-88.5856,1576,6.5,Ixonia,SEC-2 (Central),28.8
+43.1704,-88.7532,753,6.3,Watertown,SEC-2 (Central),6.7
+43.1758,-88.6608,716,6.0,Watertown,SEC-2 (Central),16.3
+43.1924,-88.724,698,5.9,Watertown,SEC-2 (Central),10.1
+43.1365,-88.5436,1173,4.9,Ixonia,SEC-2 (Central),27.2
+43.0143,-88.9899,1487,3.6,Cambridge,SEC-1 (South),16.1
+42.9702,-88.9724,983,2.4,Cambridge,SEC-1 (South),12.8
+43.0191,-88.8225,1966,0.5,Jefferson,SEC-1 (South),13.1
+42.9974,-88.7921,1655,0.4,Jefferson,SEC-1 (South),14.3
+42.9845,-88.8224,1661,0.4,Jefferson,SEC-1 (South),8.5
+43.0173,-88.7882,1045,0.3,Jefferson,SEC-1 (South),16.1
+42.9992,-88.8297,1057,0.3,Jefferson,SEC-1 (South),11.4
+43.0197,-88.7984,667,0.2,Jefferson,SEC-1 (South),18.0
+43.0002,-88.7532,826,0.2,Jefferson,SEC-1 (South),20.7
+43.0451,-88.8358,801,0.2,Jefferson,SEC-2 (Central),18.3

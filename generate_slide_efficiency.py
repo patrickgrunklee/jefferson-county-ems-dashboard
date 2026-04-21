@@ -27,7 +27,7 @@ DATA = [
     ("Palmyra",             6867,     17.1,        32,      "BLS"),
 ]
 # Edgerton: multi-county, EMS_Revenue=None → skip
-# Rome/Sullivan: fire-only, no EMS calls → skip
+# Rome and Sullivan are fire-only (not EMS providers) — excluded entirely from analysis
 # Helenville: 0 EMS calls → skip
 # Western Lakes: 5403 EMS calls, Cost/EMS = ~123, RevRecov ~22% — huge outlier on call volume
 # Lake Mills: EMS_Calls from KPI = 0 (no NFIRS), skip

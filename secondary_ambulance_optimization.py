@@ -46,10 +46,10 @@ ems_stations["Lat"] = ems_stations.geometry.y
 ems_stations["Lon"] = ems_stations.geometry.x
 ems_stations["Name"] = ems_stations["MAPLABEL"].str.replace(" EMS", "").str.strip()
 
-# Also include FD stations that serve as EMS (Helenville, Sullivan, Rome)
+# Also include FD stations that serve as EMS (Helenville only — Rome and Sullivan are fire-only)
 fd_only = stations_gdf[
     (stations_gdf["TYPE"].str.strip() == "FD") &
-    (stations_gdf["MAPLABEL"].isin(["Helenville FD", "Sullivan FD", "Rome FD"]))
+    (stations_gdf["MAPLABEL"].isin(["Helenville FD"]))
 ].copy()
 fd_only["Lat"] = fd_only.geometry.y
 fd_only["Lon"] = fd_only.geometry.x
@@ -61,11 +61,18 @@ all_stations = all_stations.drop_duplicates(subset=["Name"], keep="first").reset
 
 # Canonical 13 EMS stations matching the drive time matrix order
 # (from pareto_facility.py / boundary_optimization.py)
-STATION_ORDER = [
+# NOTE: "Sullivan" and "Rome" were legacy fire-only station positions previously
+# included as candidate EMS sites. They are NOT EMS providers. The existing 13x65
+# drive-time matrix on disk still contains their rows; we drop those rows below
+# to reduce to 11 candidate EMS stations.
+STATION_ORDER_FULL = [
     "Waterloo", "Watertown", "Ixonia", "Ryan Brothers",
     "Johnson Creek", "Sullivan", "Rome", "Helenville",
     "Jefferson", "Fort Atkinson", "Palmyra", "Cambridge", "Edgerton"
 ]
+EXCLUDE_FIRE_ONLY = {"Sullivan", "Rome"}
+_keep_idx = [i for i, s in enumerate(STATION_ORDER_FULL) if s not in EXCLUDE_FIRE_ONLY]
+STATION_ORDER = [STATION_ORDER_FULL[i] for i in _keep_idx]
 
 # Map station names to match
 name_map_stations = {
@@ -93,8 +100,10 @@ print(f"  {len(bg)} demand points (block groups), total pop: {bg['Pop'].sum():,}
 # 1c. Drive time matrix (13 stations x 65 BGs) — from ORS cache
 with open(BASE / "isochrone_cache" / "existing_bg_drive_time_matrix.json") as f:
     dtm_data = json.load(f)
-drive_time_matrix = np.array(dtm_data["matrix"])  # 13 x 65
-print(f"  Drive time matrix: {drive_time_matrix.shape}")
+drive_time_matrix = np.array(dtm_data["matrix"])  # originally 13 x 65
+# Drop Rome/Sullivan rows (fire-only) — aligned with STATION_ORDER_FULL above
+drive_time_matrix = drive_time_matrix[_keep_idx, :]
+print(f"  Drive time matrix: {drive_time_matrix.shape} (Rome/Sullivan excluded)")
 
 # Verify dimensions match
 n_stations = drive_time_matrix.shape[0]
@@ -120,7 +129,7 @@ SERVICE_POP = {
     "Edgerton": 11840, "Jefferson": 11000, "Johnson Creek": 6500,
     "Waterloo": 5000, "Ryan Brothers": 9200, "Ixonia": 6919,
     "Palmyra": 5000, "Cambridge": 3000, "Western Lakes": 8000,
-    "Helenville": 1500, "Rome": 2000, "Sullivan": 2000,
+    "Helenville": 1500,
 }
 
 # Population-weighted demand per BG (proxy: BG pop fraction of county * total calls)

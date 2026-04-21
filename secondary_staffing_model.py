@@ -21,6 +21,7 @@ Date:   March 2026
 """
 
 import os
+import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -29,6 +30,10 @@ import warnings
 warnings.filterwarnings("ignore")
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Jefferson-only mode — reads _jeffco inputs, writes _jeffco outputs
+JEFFCO_MODE = "--jeffco" in sys.argv
+OUTPUT_SUFFIX = "_jeffco" if JEFFCO_MODE else ""
 
 # ── Peterson Cost Model (from ems_dashboard_app.py line ~1924) ──────────
 # Source: 25-1210 JC EMS Workgroup Cost Projection.pdf (Chief Bruce Peterson, FAFD)
@@ -315,10 +320,11 @@ def plot_waterfall(scenario, k):
     ax.grid(axis="y", alpha=0.3)
     plt.tight_layout()
 
-    fpath = os.path.join(SCRIPT_DIR, "staffing_waterfall.png")
+    fname = f"staffing_waterfall{OUTPUT_SUFFIX}.png"
+    fpath = os.path.join(SCRIPT_DIR, fname)
     plt.savefig(fpath, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"  Saved: staffing_waterfall.png")
+    print(f"  Saved: {fname}")
 
 
 def plot_comparison(scenarios_df, current_cost):
@@ -361,10 +367,11 @@ def plot_comparison(scenarios_df, current_cost):
 
     plt.tight_layout()
 
-    fpath = os.path.join(SCRIPT_DIR, "current_vs_consolidated.png")
+    fname = f"current_vs_consolidated{OUTPUT_SUFFIX}.png"
+    fpath = os.path.join(SCRIPT_DIR, fname)
     plt.savefig(fpath, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"  Saved: current_vs_consolidated.png")
+    print(f"  Saved: {fname}")
 
 
 # ── Main ───────────────────────────────────────────────────────────────
@@ -377,7 +384,7 @@ def main():
     K = 3
 
     # Load Phase 2 solutions for context
-    sol_path = os.path.join(SCRIPT_DIR, "secondary_network_solutions.csv")
+    sol_path = os.path.join(SCRIPT_DIR, f"secondary_network_solutions{OUTPUT_SUFFIX}.csv")
     if os.path.exists(sol_path):
         solutions = pd.read_csv(sol_path)
         print(f"\n>> Phase 2 solutions loaded ({len(solutions)} rows)")
@@ -417,9 +424,10 @@ def main():
                          "Net_Cost", "Total_FTE", "Coverage_Model"]].to_string(index=False))
 
     # Save
-    csv_path = os.path.join(SCRIPT_DIR, "secondary_staffing_scenarios.csv")
+    csv_name = f"secondary_staffing_scenarios{OUTPUT_SUFFIX}.csv"
+    csv_path = os.path.join(SCRIPT_DIR, csv_name)
     scenarios_df.to_csv(csv_path, index=False)
-    print(f"\n  Saved: secondary_staffing_scenarios.csv")
+    print(f"\n  Saved: {csv_name}")
 
     # FTE transition
     print(f"\n>> Computing FTE transition...")
@@ -430,9 +438,10 @@ def main():
     print(f"   Proposed FTE for {K} stations (24/7): {proposed_a:.1f}")
     print(f"   Proposed FTE for {K} stations (peak): {proposed_b:.1f}")
 
-    fte_path = os.path.join(SCRIPT_DIR, "fte_transition.csv")
+    fte_name = f"fte_transition{OUTPUT_SUFFIX}.csv"
+    fte_path = os.path.join(SCRIPT_DIR, fte_name)
     fte_df.to_csv(fte_path, index=False)
-    print(f"  Saved: fte_transition.csv")
+    print(f"  Saved: {fte_name}")
 
     # Plots
     print(f"\n>> Generating charts...")

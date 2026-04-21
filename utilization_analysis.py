@@ -32,7 +32,7 @@ ALS_LEVELS = {
     'Jefferson': 'ALS', 'Johnson Creek': 'ALS', 'Edgerton': 'ALS',
     'Cambridge': 'ALS', 'Waterloo': 'AEMT', 'Palmyra': 'BLS',
     'Ixonia': 'BLS', 'Helenville': 'BLS', 'Lake Mills': 'BLS',
-    'Rome': 'N/A', 'Sullivan': 'N/A', 'Western Lakes': 'ALS',
+    'Western Lakes': 'ALS',
 }
 
 df = budget.merge(call_data, on='Municipality', how='left')

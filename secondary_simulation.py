@@ -72,7 +72,7 @@ DISPATCH_DELAY_CAREER = 1.5    # Career departments: turnout time
 DISPATCH_DELAY_VOLUNTEER = 4.0 # Volunteer departments: page + response
 DISPATCH_DELAY_COUNTY = 1.5    # Proposed county units: all career-staffed
 
-VOLUNTEER_DEPTS = {"Ixonia", "Palmyra", "Cambridge", "Helenville", "Sullivan", "Rome"}
+VOLUNTEER_DEPTS = {"Ixonia", "Palmyra", "Cambridge", "Helenville"}
 
 # Station name -> index in EXISTING_STATIONS list (for drive-time matrix lookup)
 STATION_IDX = {s["name"]: s["id"] for s in EXISTING_STATIONS}

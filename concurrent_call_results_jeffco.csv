@@ -1,0 +1,11 @@
+Dept,EMS_Calls_2024,Secondary_Events,Pct_Concurrent,Max_Concurrent,Mean_Concurrent,Ambulances,All_Busy_Events,Pct_All_Busy
+Fort Atkinson,1605,201,12.5,3,0.13,3,1,0.1
+Watertown,992,193,19.5,2,0.22,3,0,0.0
+Waterloo,399,91,22.8,3,0.27,2,12,3.0
+Johnson Creek,454,59,13.0,4,0.15,2,7,1.5
+Ixonia,172,21,12.2,2,0.13,1,21,12.2
+Cambridge,64,4,6.2,1,0.06,0,64,100.0
+Jefferson,91,2,2.2,1,0.02,3,0,0.0
+Edgerton,25,0,0.0,0,0.0,1,0,0.0
+Whitewater,1,0,0.0,0,0.0,0,1,100.0
+Palmyra,32,0,0.0,0,0.0,1,0,0.0

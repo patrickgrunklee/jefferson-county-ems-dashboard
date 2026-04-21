@@ -435,8 +435,7 @@ ambulance_data = [
     ("Helenville", "None listed", None, "", "", "", "", "", "", "", "", "", None, "NO ambulance/EMS tab; fire only"),
     ("Johnson Creek", "None listed", None, "", "", "", "", "", "", "", "", "", None, "NO ambulance/EMS tab; fire only"),
     ("Lake Mills", "None listed", None, "", "", "", "", "", "", "", "", "", None, "EMS via Ryan Bros (private contractor)"),
-    ("Rome", "None listed", None, "", "", "", "", "", "", "", "", "", None, "NO ambulance/EMS tab; fire only"),
-    ("Sullivan", "None listed", None, "", "", "", "", "", "", "", "", "", None, "NO ambulance/EMS tab; fire only"),
+    # Rome and Sullivan are fire-only — not EMS providers, excluded from EMS comparison
     ("Western Lakes", "Template only", None, "", "", "", "", "", "", "", "", "", None, "4 ambulance slots in sheet but ALL EMPTY"),
     ("Whitewater", "3 ambulances", None, "", "", "ALS - Paramedic (since 2023)", "", "", "", "", "", "18 FT + 12 POC; 5 per 24hr shift", None, "MABAS sheet empty but city website confirms 3 ambulances; 2,000+ calls/yr; 100 sq mi service area"),
     ("", "", "", "", "", "", "", "", "", "", "", "", "", ""),
@@ -486,8 +485,7 @@ fire_data = [
     ("Johnson Creek", "2016", 2, 1, 1, 2, 1, 1, 1, 0, 0, 0, 9, "No"),
     ("Lake Mills", "2020", 3, 1, 1, 1, 1, 1, 0, 2, 1, 0, 11, "No"),
     ("Palmyra", "2025", 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 7, "Yes"),
-    ("Rome", "~2020", 2, 0, 0, 1, 0, 1, 1, 0, 0, 0, 5, "No"),
-    ("Sullivan", "~2020", 2, 0, 0, 2, 0, 1, 1, 0, 0, 0, 6, "No"),
+    # Rome and Sullivan are fire-only departments — excluded from EMS comparison
     ("Waterloo Fire & Rescue", "2015", 2, 1, 0, 2, 0, 1, 2, 0, 0, 2, 10, "Yes"),
     ("Watertown", "~2020", 3, 1, 0, 2, 1, 1, 0, 1, 1, 3, 12, "Yes (3 ambulances)"),
     ("Western Lakes", "~2024", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "Template only - NO DATA"),

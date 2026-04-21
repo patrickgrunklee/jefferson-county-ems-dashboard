@@ -31,8 +31,7 @@ NAME_MAP = {
     "Jefferson Fire Dept":               "Jefferson",
     "Johnson Creek Fire Dept":           "Johnson Creek",
     "Palmyra Village Fire Dept":         "Palmyra",
-    "Rome Fire Dist":                    "Rome",
-    "Sullivan Vol Fire Dept":            "Sullivan",
+    # Rome and Sullivan are fire-only — no EMS role. Omitted from all EMS analysis.
     "Waterloo Fire Dept":                "Waterloo",
     "Watertown Fire Dept":               "Watertown",
     "Western Lake Fire District":        "Western Lakes",
@@ -45,9 +44,14 @@ EMS_DEPTS = [
 ]
 
 AMBULANCE_COUNT = {
-    "Watertown": 3, "Fort Atkinson": 3, "Whitewater": 2, "Edgerton": 2,
-    "Jefferson": 5, "Johnson Creek": 2, "Waterloo": 2,
-    "Ixonia": 1, "Palmyra": 1, "Cambridge": 0,
+    # Jefferson-stationed units only (corrected 2026-04-20)
+    # Jefferson: 3 transport ambulances (Rescue 754/755/756); SUVs 799/798 are ALS intercept, not transport
+    # Western Lakes: 2 est. Jefferson-stationed (Sullivan/Concord area); pending callaround 2026-04-21
+    # Edgerton: 1 est. Jefferson-stationed (Koshkonong/Sumner area); pending callaround 2026-04-21
+    # Whitewater: 4 units based in Whitewater city (Walworth Co.) — 0 Jefferson-stationed
+    "Watertown": 3, "Fort Atkinson": 3, "Whitewater": 0, "Edgerton": 1,
+    "Jefferson": 3, "Johnson Creek": 2, "Waterloo": 2, "Lake Mills": 3,
+    "Ixonia": 1, "Palmyra": 1, "Cambridge": 0, "Western Lakes": 2,
 }
 
 DEPT_COORDS = {

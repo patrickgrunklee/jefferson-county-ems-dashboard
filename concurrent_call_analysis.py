@@ -17,6 +17,7 @@ Date:   March 2026
 """
 
 import os
+import sys
 import glob
 import numpy as np
 import pandas as pd
@@ -28,6 +29,10 @@ warnings.filterwarnings("ignore")
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CALL_DATA_DIR = os.path.join(SCRIPT_DIR, "ISyE Project", "Data and Resources", "Call Data")
+
+# Jefferson-only filter mode (set via --jeffco CLI flag)
+JEFFCO_MODE = "--jeffco" in sys.argv
+OUTPUT_SUFFIX = "_jeffco" if JEFFCO_MODE else ""
 
 # ── Department name normalization ────────────────────────────────────────
 # NFIRS "Fire Department Name" → canonical short name
@@ -44,8 +49,7 @@ DEPT_NAME_MAP = {
     "Palmyra Village Fire Dept":            "Palmyra",
     "CAMBRIDGE COMM FIRE DEPT":             "Cambridge",
     "Western Lake Fire District":           "Western Lakes",
-    "Rome Fire Dist":                       "Rome",
-    "Sullivan Vol Fire Dept":               "Sullivan",
+    # Rome Fire Dist and Sullivan Vol Fire Dept are fire-only — excluded from EMS analysis
     # Fallbacks for possible alternative spellings
     "Lake Mills Fire Dept":                 "Lake Mills",
     "Helenville Fire Dept":                 "Helenville",
@@ -63,9 +67,10 @@ EMS_TRANSPORT_DEPTS = [
 
 # Number of frontline ambulances per department (from boundary_optimization.py)
 AMBULANCE_COUNT = {
-    "Watertown": 3, "Fort Atkinson": 3, "Whitewater": 2, "Edgerton": 2,
-    "Jefferson": 3, "Johnson Creek": 2, "Waterloo": 2, "Lake Mills": 1,
-    "Ixonia": 1, "Palmyra": 1, "Cambridge": 0,
+    # Jefferson-stationed units only (corrected 2026-04-20)
+    "Watertown": 3, "Fort Atkinson": 3, "Whitewater": 0, "Edgerton": 1,
+    "Jefferson": 3, "Johnson Creek": 2, "Waterloo": 2, "Lake Mills": 3,
+    "Ixonia": 1, "Palmyra": 1, "Cambridge": 0, "Western Lakes": 2,
 }
 
 
@@ -90,6 +95,14 @@ def load_all_nfirs():
     )
     ems = all_df[ems_mask].copy()
     print(f"  EMS calls only: {len(ems):,}")
+
+    # Jefferson-only geographic filter (per Megan 2026-04-19 corrections)
+    if JEFFCO_MODE:
+        from jefferson_geo_filter import filter_to_jefferson
+        before = len(ems)
+        ems, stats = filter_to_jefferson(ems)
+        print(f"  Jefferson-only filter: {before:,} -> {len(ems):,} "
+              f"({stats['dropped_rows']:,} dropped as out-of-county)")
 
     # Normalize department names
     ems["Dept"] = ems["Fire Department Name"].map(DEPT_NAME_MAP)
@@ -353,10 +366,11 @@ def plot_heatmap(rate_df, detail_df):
     plt.colorbar(im, ax=ax, label="Concurrent Rate (%)", shrink=0.8)
     plt.tight_layout()
 
-    fpath = os.path.join(SCRIPT_DIR, "concurrent_hourly_heatmap.png")
+    fname = f"concurrent_hourly_heatmap{OUTPUT_SUFFIX}.png"
+    fpath = os.path.join(SCRIPT_DIR, fname)
     plt.savefig(fpath, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"  Saved: concurrent_hourly_heatmap.png")
+    print(f"  Saved: {fname}")
 
 
 def plot_secondary_by_dept(summary_df):
@@ -405,10 +419,11 @@ def plot_secondary_by_dept(summary_df):
     ax.set_xlim(0, df["Secondary_Events"].max() * 1.35)
     plt.tight_layout()
 
-    fpath = os.path.join(SCRIPT_DIR, "secondary_demand_by_dept.png")
+    fname = f"secondary_demand_by_dept{OUTPUT_SUFFIX}.png"
+    fpath = os.path.join(SCRIPT_DIR, fname)
     plt.savefig(fpath, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"  Saved: secondary_demand_by_dept.png")
+    print(f"  Saved: {fname}")
 
 
 # ── Main ────────────────────────────────────────────────────────────────
@@ -429,9 +444,10 @@ def main():
     # 3. Summarize
     print("\n>> Summarizing per department...")
     summary = summarize_concurrent(detail)
-    csv_path = os.path.join(SCRIPT_DIR, "concurrent_call_results.csv")
+    csv_name = f"concurrent_call_results{OUTPUT_SUFFIX}.csv"
+    csv_path = os.path.join(SCRIPT_DIR, csv_name)
     summary.to_csv(csv_path, index=False)
-    print(f"  Saved: concurrent_call_results.csv")
+    print(f"  Saved: {csv_name}")
     print()
     print(summary.to_string(index=False))
 
@@ -442,9 +458,10 @@ def main():
     # 5. Erlang-C
     print("\n>> Computing Erlang-C queueing model...")
     erlang_df = compute_erlang_c(detail)
-    erlang_path = os.path.join(SCRIPT_DIR, "erlang_c_results.csv")
+    erlang_name = f"erlang_c_results{OUTPUT_SUFFIX}.csv"
+    erlang_path = os.path.join(SCRIPT_DIR, erlang_name)
     erlang_df.to_csv(erlang_path, index=False)
-    print(f"  Saved: erlang_c_results.csv")
+    print(f"  Saved: {erlang_name}")
     print()
     print(erlang_df.to_string(index=False))
 
@@ -454,11 +471,12 @@ def main():
     plot_secondary_by_dept(summary)
 
     # 7. Save detail for downstream phases
-    detail_path = os.path.join(SCRIPT_DIR, "concurrent_call_detail.csv")
+    detail_name = f"concurrent_call_detail{OUTPUT_SUFFIX}.csv"
+    detail_path = os.path.join(SCRIPT_DIR, detail_name)
     detail[["Dept", "Alarm_DT", "Cleared_DT", "Hour", "DOW",
             "Response_Min", "Duration_Min", "Concurrent_Count"]
            ].to_csv(detail_path, index=False)
-    print(f"  Saved: concurrent_call_detail.csv (for Phase 2/4)")
+    print(f"  Saved: {detail_name} (for Phase 2/4)")
 
     print("\n" + "=" * 70)
     print("PHASE 1 COMPLETE")

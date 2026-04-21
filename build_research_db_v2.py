@@ -43,8 +43,8 @@ MUNICIPALITIES = {
     'milford': 'Town of Milford',
     'oakland': 'Town of Oakland',
     'palmyra': 'Village of Palmyra',
-    'rome': 'Town of Rome',
-    'sullivan': 'Town of Sullivan',
+    # Note: "Rome" is NOT a Jefferson Co. municipality — Rome Fire Dist (fire-only) serves Cold Spring + Sumner towns
+    'sullivan': 'Town of Sullivan',  # real municipality; EMS served by Western Lakes
     'sumner': 'Town of Sumner',
     'waterloo': 'City of Waterloo',
     'watertown': 'City of Watertown',

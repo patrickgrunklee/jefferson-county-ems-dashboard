@@ -45,14 +45,16 @@ NAME_MAP = {
     "Jefferson Fire Dept":                 "Jefferson",
     "Johnson Creek Fire Dept":             "Johnson Creek",
     "Palmyra Village Fire Dept":           "Palmyra",
-    "Rome Fire Dist":                      "Rome",
-    "Sullivan Vol Fire Dept":              "Sullivan",
+    # Rome Fire Dist and Sullivan Vol Fire Dept are FIRE-ONLY — no EMS role.
+    # Neighboring EMS agencies (Whitewater, Fort Atkinson, Edgerton, Western Lakes,
+    # Jefferson) handle EMS calls in those towns. Omitted from all EMS analysis.
     "Waterloo Fire Dept":                  "Waterloo",
     "Watertown Fire Dept":                 "Watertown",
-    # NOTE: Western Lake Fire District (Waukesha Co.) serves Oakland/Concord in Jefferson Co.
-    # Its NFIRS file includes ALL district calls (~6,581 in 2024); ~76% are in Oconomowoc
-    # (zip 53066, Waukesha Co.). Only ~200-250 calls are Jefferson Co. incidents.
-    # Western Lakes call volume KPIs reflect total district volume, not Jefferson Co. only.
+    # NOTE: Western Lake Fire District (Waukesha Co. HQ) serves Sullivan/Concord/
+    # Palmyra/Ixonia area of Jefferson Co. Its NFIRS file has 6,581 all-district
+    # calls (2024); only 263 are Jefferson-Co. incidents per Megan 2026-04-19.
+    # AUTH_EMS_CALLS reflects the Jefferson-only 263; analyses using NFIRS data
+    # directly apply jefferson_geo_filter.filter_to_jefferson() to drop Waukesha.
     "Western Lake Fire District":          "Western Lakes",
     "Whitewater Fire and EMS":             "Whitewater",
 }
@@ -126,6 +128,9 @@ def _load_call_data():
     print(f"  xlsx load: {_time.time()-t0:.2f}s")
 
     # Apply transforms before caching
+    # Drop fire-only departments (Rome Fire Dist, Sullivan Vol Fire Dept) — no EMS role
+    _FIRE_ONLY = ("Rome Fire Dist", "Sullivan Vol Fire Dept")
+    df = df[~df["Fire Department Name"].isin(_FIRE_ONLY)].copy()
     df["Department"] = df["Fire Department Name"].map(NAME_MAP).fillna(df["Fire Department Name"])
     # Month column is stored as 3-letter abbreviation strings ("Jan".."Dec") — map to 1..12
     df["Month"]      = df["Alarm Date - Month of Year"].map(_MONTH_STR_TO_INT)
@@ -149,6 +154,11 @@ def _load_call_data():
     return df
 
 raw = _load_call_data()
+
+# Drop fire-only depts even when reloading from an older cache (pre-cleanup parquet)
+_FIRE_ONLY_DEPT_NAMES = ("Rome Fire Dist", "Sullivan Vol Fire Dept")
+if "Fire Department Name" in raw.columns:
+    raw = raw[~raw["Fire Department Name"].isin(_FIRE_ONLY_DEPT_NAMES)].copy()
 
 # If loaded from cache, derived columns already exist; if from xlsx, they were just created.
 # Ensure derived columns exist (cache path)
@@ -189,40 +199,67 @@ def _extrapolate_annual(counts_series, dept_series):
         result.loc[mask] = (counts_series.loc[mask] / months * 12).round(0)
     return result
 
-# ── Authoritative 2024 EMS Call Volumes (user-provided ground truth) ─────────
-# These override any counts derived from NFIRS files. Source document pending.
-# Lake Mills* asterisk = caveat TBD.
+# ── Authoritative 2024 Call Volumes (Megan 2026-04-19) ──────────────────────
+# Fire+EMS combined, Jefferson-County geography only. Supersedes prior NFIRS-
+# derived totals that included out-of-county calls (Western Lakes district
+# spans Waukesha Co., Edgerton/Lakeside spans Rock Co., Whitewater spans
+# Walworth Co.). Pre-correction snapshot preserved at git commit 9b7d477.
 AUTH_EMS_CALLS = {
-    "Cambridge":      87,
+    "Cambridge":      197,   # was 87 (EMS-only); Megan: 197 fire+EMS combined
     "Fort Atkinson":  1616,
-    "Ixonia":         289,
+    "Ixonia":         338,   # was 289; Megan email correction
     "Jefferson":      1457,
-    "Johnson Creek":  487,
+    "Johnson Creek":  1090,  # was 487 (EMS-only); Megan: 1090 fire+EMS combined
     "Lake Mills":     518,
     "Palmyra":        32,
     "Waterloo":       520,
     "Watertown":      2012,
-    "Whitewater":     64,    # Jefferson County contracts only
-    "Edgerton":       2138,
-    "Western Lakes":  5633,
+    "Whitewater":     64,    # Koshkonong & Cold Springs contracts only
+    "Edgerton":       289,   # was 2138 (all-district NFIRS); Megan: 289 Jefferson-only
+    "Western Lakes":  263,   # was 5633 (all-district NFIRS); Megan: 263 Jefferson-only
 }
-_AUTH_COUNTY_TOTAL = sum(AUTH_EMS_CALLS.values())  # 14,853
+_AUTH_COUNTY_TOTAL = sum(AUTH_EMS_CALLS.values())  # 8,396
 
-# ── Call volume discrepancy notes (Looker Studio vs AUTH_EMS_CALLS) ──────────
-# Where Looker Studio PDF data differs from our authoritative counts, document why.
-# These trigger asterisks (*) on call volume displays so readers know about the gap.
+# ── Call volume notes (documents data-source caveats per dept) ─────────────
+# Drives asterisk footnotes on call volume tables so readers see the lineage.
 CALL_VOLUME_NOTES = {
-    "Cambridge":     "Looker Studio reports 197 total incidents (all types); 87 = EMS-only",
-    "Ixonia":        "Looker Studio reports 248 (NFIRS); 289 from Chief Association data",
-    "Johnson Creek": "Looker Studio reports 1,090 total incidents (all types); 487 = EMS-only",
-    "Waterloo":      "Looker Studio reports 417 (NFIRS); 520 from Chief Association data",
+    "Cambridge":     "Megan 2026-04-19: 197 fire+EMS combined, confirmed with "
+                     "Cambridge 2024 Annual Report.",
+    "Ixonia":        "Megan 2026-04-19: 338. Prior dataset (289) had non-EMS "
+                     "calls pre-filtered for another project.",
+    "Johnson Creek": "Megan 2026-04-19: 1,090 fire+EMS combined, confirmed with "
+                     "department. Prior NFIRS figure (487) was underreported.",
+    "Waterloo":      "Megan 2026-04-19: 520 fire+EMS combined. Provider CSV "
+                     "(379 rows) is EMS-only subset.",
+    "Edgerton":      "Megan 2026-04-19: 289 Jefferson-County calls ONLY, "
+                     "provided directly by department. Prior NFIRS figure (2,138) "
+                     "included the full Lakeside FPD jurisdiction (mostly Rock Co.).",
+    "Western Lakes": "Megan 2026-04-19: 263 Jefferson-County calls ONLY, "
+                     "filtered from their all-district dataset. Prior figure "
+                     "(5,633) included Waukesha-Co. responses.",
 }
 
-# ── Data quality notes (known issues in external sources) ───────────────────
+# ── Data quality notes (affect incident-level/micro analyses, not macro KPIs) ─
+# Macro KPIs use AUTH_EMS_CALLS (Megan's authoritative totals) directly.
+# Micro analyses (hourly patterns, address-level, concurrent-call, secondary-
+# network) may diverge from macro totals for the depts below.
 DATA_QUALITY_NOTES = {
-    "Edgerton": "Looker Studio PDF address table shows Fort Atkinson addresses "
-                "(430 Wilcox St, 525 Memorial Dr) — likely a data join error in the "
-                "Looker report. City breakdown correctly shows Milton/Edgerton.",
+    "Edgerton":       "INCIDENT-LEVEL DATA UNAVAILABLE. NFIRS export yields only "
+                      "~26 Jefferson-area records out of Megan's 289 authoritative "
+                      "total. Macro KPIs reflect 289; hourly/address/concurrent "
+                      "analyses are not possible for Edgerton.",
+    "Western Lakes":  "Incident-level filter yields 281 records vs 263 target "
+                      "(+6.8%). Muni-boundary ambiguity (Sullivan town/village, "
+                      "Concord town) drives the delta. Macro KPI uses 263.",
+    "Fort Atkinson":  "Macro KPI 1,616 (Megan). NFIRS has 2,076 Jefferson-Co. "
+                      "incidents; micro analyses may over-count by ~26%. Gap "
+                      "possibly due to excluded service/hazardous-condition "
+                      "records in Megan's count.",
+    "Watertown":      "Macro KPI 2,012 (Megan). City jurisdiction crosses into "
+                      "Dodge Co.; NFIRS shows 2,719 total. Per-ZIP/per-address "
+                      "analyses may show Dodge-Co. addresses.",
+    "Waterloo":       "Macro KPI 520 (Megan, fire+EMS). Provider CSV 379 rows is "
+                      "EMS-only. Hourly/address analyses use the EMS-only subset.",
 }
 
 # ── High-frequency call addresses (from Looker Studio PDFs, 2024) ───────────
@@ -476,9 +513,6 @@ ALS_LEVELS = {
     "Ixonia":         {"Level": "BLS",  "Notes": "Likely BLS; LifeQuest/EMSMC billing", "Confidence": "Low"},
     "Helenville":     {"Level": "BLS",  "Notes": "All-volunteer (35 members); likely BLS", "Confidence": "Low"},
     "Lake Mills":     {"Level": "BLS",  "Notes": "LMFD BLS support; Ryan Brothers ALS under contract", "Confidence": "High"},
-    # Rome and Sullivan do not transport — EMS handled by Western Lakes FD
-    "Rome":           {"Level": "N/A",  "Notes": "Fire suppression only; EMS by Western Lakes FD", "Confidence": "High"},
-    "Sullivan":       {"Level": "N/A",  "Notes": "Fire suppression only; EMS by Western Lakes FD", "Confidence": "High"},
     "Western Lakes":  {"Level": "ALS",  "Notes": "Multi-county ALS; primary service area is Waukesha Co.", "Confidence": "High"},
 }
 
@@ -516,9 +550,6 @@ SERVICE_AREA_POP = {
     "Waterloo":       4603,   # City of Waterloo 3,644 + Town of Milford 81 + Town of Waterloo 878
     "Western Lakes":  4507,   # Village of Sullivan 657 + T. Concord 1,514 + T. Palmyra 2 + T. Sullivan 2,334
     "Helenville":     1500,   # Small district — estimated from GeoJSON area (not in DOA provider breakdown)
-    # Rome and Sullivan are fire-only — no EMS service area population relevant
-    "Rome":           2800,   # Cold Spring town + Sumner town (fire-only, no EMS)
-    "Sullivan":       2860,   # Sullivan town + village (fire-only, EMS by Western Lakes)
 }
 # Population data sources (for dashboard citation):
 _POP_SOURCES = [
@@ -626,6 +657,10 @@ ASSET_DATA = pd.DataFrame([
      "Ambulance_Detail": "N/A — no EMS provider",
      "EMS_Personnel": 0, "Paramedics": 0, "AEMTs": 0, "EMTs": 0, "EMRs": 0,
      "Source_File": "Cambridge MABAS DIV 118 FD Resource List.xlsx"},
+    {"Municipality": "Edgerton",     "Engines": 0, "Trucks_Ladders": 0, "Squads_Rescues": 0, "Tenders": 0, "Brush_ATV": 0, "Boats": 0, "Ambulances": 1,
+     "Ambulance_Detail": "1 unit est. Jefferson-stationed (Koshkonong/Sumner area) — pending Peterson/Wegner callaround 2026-04-21. Full district fleet based in Milton (Rock Co.)",
+     "EMS_Personnel": 0, "Paramedics": 0, "AEMTs": 0, "EMTs": 0, "EMRs": 0,
+     "Source_File": "Edgerton (Lakeside FPD) — MABAS data not filed; estimate per 2026-04-20 assumption"},
     {"Municipality": "Fort Atkinson", "Engines": 3, "Trucks_Ladders": 1, "Squads_Rescues": 2, "Tenders": 2, "Brush_ATV": 2, "Boats": 2, "Ambulances": 3,
      "Ambulance_Detail": "Medic 8158 (2023 Ford/Lifeline ALS) | Rescue 8159 (2017 Ford/LSV) | Rescue 8157 (2004 Chevy/EDM BLS)",
      "EMS_Personnel": 30, "Paramedics": 9, "AEMTs": 6, "EMTs": 15, "EMRs": 0,
@@ -638,8 +673,8 @@ ASSET_DATA = pd.DataFrame([
      "Ambulance_Detail": "Unit 8351 (2012 Ford F-550/Lifeline)",
      "EMS_Personnel": 14, "Paramedics": 5, "AEMTs": 5, "EMTs": 0, "EMRs": 4,
      "Source_File": "Ixonia Resource List 2020.xlsx"},
-    {"Municipality": "Jefferson",     "Engines": 3, "Trucks_Ladders": 1, "Squads_Rescues": 1, "Tenders": 2, "Brush_ATV": 2, "Boats": 2, "Ambulances": 5,
-     "Ambulance_Detail": "Rescue 754 (2021 Ford/Horton ALS) | Rescue 755 (2014 Ford/Horton) | Rescue 756 (2007 Ford/Horton) | Intercept 799 (2019 Ford) | Backup 798 (2009 Ford)",
+    {"Municipality": "Jefferson",     "Engines": 3, "Trucks_Ladders": 1, "Squads_Rescues": 1, "Tenders": 2, "Brush_ATV": 2, "Boats": 2, "Ambulances": 3,
+     "Ambulance_Detail": "Rescue 754 (2021 Ford/Horton ALS) | Rescue 755 (2014 Ford/Horton) | Rescue 756 (2007 Ford/Horton) | Note: Intercept 799 + Backup 798 are ALS SUVs (paramedic intercept, not transport units)",
      "EMS_Personnel": 39, "Paramedics": 13, "AEMTs": 11, "EMTs": 15, "EMRs": 0,
      "Source_File": "Jefferson MABAS DIV 118 FD Resource List 2024.xlsx"},
     {"Municipality": "Johnson Creek", "Engines": 2, "Trucks_Ladders": 1, "Squads_Rescues": 1, "Tenders": 2, "Brush_ATV": 2, "Boats": 0, "Ambulances": 2,
@@ -654,14 +689,6 @@ ASSET_DATA = pd.DataFrame([
      "Ambulance_Detail": "Rescue 717 (year/make not filed)",
      "EMS_Personnel": 16, "Paramedics": 1, "AEMTs": 5, "EMTs": 9, "EMRs": 1,
      "Source_File": "Palmyra Equipment List.xlsx"},
-    {"Municipality": "Rome",          "Engines": 2, "Trucks_Ladders": 0, "Squads_Rescues": 1, "Tenders": 1, "Brush_ATV": 2, "Boats": 0, "Ambulances": 0,
-     "Ambulance_Detail": "N/A — fire suppression only",
-     "EMS_Personnel": 0, "Paramedics": 0, "AEMTs": 0, "EMTs": 0, "EMRs": 0,
-     "Source_File": "Rome MABAS DIV 118 RFD.xlsx"},
-    {"Municipality": "Sullivan",      "Engines": 2, "Trucks_Ladders": 0, "Squads_Rescues": 0, "Tenders": 2, "Brush_ATV": 2, "Boats": 0, "Ambulances": 0,
-     "Ambulance_Detail": "N/A — fire suppression only",
-     "EMS_Personnel": 4, "Paramedics": 0, "AEMTs": 0, "EMTs": 4, "EMRs": 0,
-     "Source_File": "Sullivan MABAS DIV 118 FD Resource List.xlsx"},
     {"Municipality": "Waterloo",      "Engines": 2, "Trucks_Ladders": 1, "Squads_Rescues": 0, "Tenders": 2, "Brush_ATV": 3, "Boats": 0, "Ambulances": 2,
      "Ambulance_Detail": "Rescue 3959 (2005 Freightliner/MedTech) | Rescue 3958 (2014 Freightliner/Horton)",
      "EMS_Personnel": 27, "Paramedics": 0, "AEMTs": 13, "EMTs": 10, "EMRs": 2,
@@ -670,12 +697,12 @@ ASSET_DATA = pd.DataFrame([
      "Ambulance_Detail": "MED 54 (2023 Ford/Lifeline) | Med 52 (2006 International) | Med 53 (2014 Ford F450)",
      "EMS_Personnel": 29, "Paramedics": 22, "AEMTs": 1, "EMTs": 6, "EMRs": 0,
      "Source_File": "Watertown MABAS DIV 118 FD Resource List.xlsx"},
-    {"Municipality": "Western Lakes", "Engines": 0, "Trucks_Ladders": 0, "Squads_Rescues": 0, "Tenders": 0, "Brush_ATV": 0, "Boats": 0, "Ambulances": 0,
-     "Ambulance_Detail": "Blank MABAS template — no data filed",
+    {"Municipality": "Western Lakes", "Engines": 0, "Trucks_Ladders": 0, "Squads_Rescues": 0, "Tenders": 0, "Brush_ATV": 0, "Boats": 0, "Ambulances": 2,
+     "Ambulance_Detail": "2 units est. Jefferson-stationed (Sullivan/Concord area) — pending Peterson/Wegner callaround 2026-04-21. Full district fleet larger (HQ in Oconomowoc, Waukesha Co.)",
      "EMS_Personnel": 0, "Paramedics": 0, "AEMTs": 0, "EMTs": 0, "EMRs": 0,
      "Source_File": "Western Lakes MABAS DIV 118 FD Resource List.xlsx"},
     {"Municipality": "Whitewater",    "Engines": 3, "Trucks_Ladders": 1, "Squads_Rescues": 1, "Tenders": 2, "Brush_ATV": 2, "Boats": 0, "Ambulances": 4,
-     "Ambulance_Detail": "4 ambulance records (unit IDs/details not filed in MABAS sheet)",
+     "Ambulance_Detail": "4 ambulances based in Whitewater city (Walworth Co.) — Jefferson Co. contracts (Koshkonong/Cold Spring) served by response from Whitewater, not a Jefferson-stationed unit",
      "EMS_Personnel": 50, "Paramedics": 0, "AEMTs": 30, "EMTs": 20, "EMRs": 0,
      "Source_File": "Whitewater MABAS DIV 118 FD Resource List-WW.xlsx"},
 ])
@@ -690,8 +717,8 @@ AMBULANCE_DETAIL = pd.DataFrame([
     {"Municipality": "Jefferson",     "Unit": "Rescue 754",  "Year": 2021, "Chassis": "Ford",          "Body": "Horton",    "Level": "ALS"},
     {"Municipality": "Jefferson",     "Unit": "Rescue 755",  "Year": 2014, "Chassis": "Ford",          "Body": "Horton",    "Level": "AEMT"},
     {"Municipality": "Jefferson",     "Unit": "Rescue 756",  "Year": 2007, "Chassis": "Ford E-350",    "Body": "Horton",    "Level": "BLS"},
-    {"Municipality": "Jefferson",     "Unit": "Intercept 799","Year": 2019,"Chassis": "Ford Interceptor","Body": "N/A",      "Level": "ALS"},
-    {"Municipality": "Jefferson",     "Unit": "Backup 798",  "Year": 2009, "Chassis": "Ford Explorer",  "Body": "N/A",      "Level": "ALS"},
+    # Intercept 799 (2019 Ford) and Backup 798 (2009 Ford Explorer) are ALS paramedic intercept SUVs
+    # — not transport ambulances; excluded from ambulance count per 2026-04-20 correction
     {"Municipality": "Waterloo",      "Unit": "Rescue 3959", "Year": 2005, "Chassis": "Freightliner",  "Body": "MedTech",   "Level": "AEMT"},
     {"Municipality": "Waterloo",      "Unit": "Rescue 3958", "Year": 2014, "Chassis": "Freightliner",  "Body": "Horton",    "Level": "AEMT"},
     {"Municipality": "Watertown",     "Unit": "MED 54",      "Year": 2023, "Chassis": "Ford F350",     "Body": "Lifeline",  "Level": "ALS"},
@@ -717,17 +744,15 @@ DEPT_TO_NAMELSAD = {
     "Lake Mills":    ["Lake Mills city", "Lake Mills town"],
     # Cambridge extends slightly W across county line; Cambridge village is in Jefferson Co.
     "Cambridge":     ["Cambridge village"],
-    # Central W — Sumner + Hebron in Rome/Sullivan area
-    "Rome":          ["Cold Spring town", "Sumner town"],
-    "Sullivan":      ["Sullivan town", "Sullivan village"],
     # Central — Jefferson EMS covers Jefferson city + town + Hebron
     "Jefferson":     ["Jefferson city", "Jefferson town", "Hebron town"],
     # E central — Western Lakes covers Oakland + Concord + Palmyra town
-    "Western Lakes": ["Oakland town", "Concord town"],
-    # Fort Atkinson covers city + Koshkonong town
-    "Fort Atkinson": ["Fort Atkinson city", "Koshkonong town"],
-    # SW — Whitewater city
-    "Whitewater":    ["Whitewater city"],
+    # Sullivan town + village are fire-only served by Sullivan VFD; EMS by Western Lakes.
+    "Western Lakes": ["Oakland town", "Concord town", "Sullivan town", "Sullivan village"],
+    # Fort Atkinson covers city + Koshkonong town + Sumner town (shared w/ Edgerton, larger pop share per DOA)
+    "Fort Atkinson": ["Fort Atkinson city", "Koshkonong town", "Sumner town"],
+    # SW — Whitewater city + Cold Spring town (formerly Rome VFD area, fire-only; EMS by Whitewater per DOA)
+    "Whitewater":    ["Whitewater city", "Cold Spring town"],
     # Palmyra village + town (SE)
     "Palmyra":       ["Palmyra village", "Palmyra town"],
     # Edgerton (Lakeside) — primarily SE, Albion is in Dane Co so we use no polygon;
@@ -857,8 +882,6 @@ STATION_COORDS = {
     "Johnson Creek": (43.0819, -88.7759),
     "Lake Mills":    (43.0783, -88.9113),
     "Palmyra":       (42.8778, -88.5862),
-    "Rome":          (42.9315, -88.6270),
-    "Sullivan":      (42.9640, -88.5810),
     "Waterloo":      (43.1815, -88.9904),
     "Watertown":     (43.1959, -88.7235),
     "Western Lakes": (43.0295, -88.5968),
@@ -1673,7 +1696,7 @@ def _get_fig_bayfield_levy():
 _df_jeff_bayfield_compare = pd.DataFrame([
     {
         "Metric":                   "EMS Agencies",
-        "Jefferson County":         "12 (excl. Rome/Sullivan fire-only)",
+        "Jefferson County":         "12",
         "Bayfield County":          "9",
     },
     {
@@ -6897,7 +6920,7 @@ def _get_levy_projection_figs():
 @lru_cache(maxsize=1)
 def _get_population_table():
     """Build a table showing WI DOA populations per EMS provider."""
-    ems_depts = [d for d in SERVICE_AREA_POP if d not in ("Helenville", "Rome", "Sullivan")]
+    ems_depts = [d for d in SERVICE_AREA_POP if d != "Helenville"]
     rows = []
     for dept in sorted(ems_depts, key=lambda d: SERVICE_AREA_POP[d], reverse=True):
         pop = SERVICE_AREA_POP[dept]

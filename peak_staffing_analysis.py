@@ -47,10 +47,7 @@ NAME_MAP = {
     "Johnson Creek Fire Dept": "Johnson Creek",
     "Palmyra Fire Dept": "Palmyra",
     "Palmyra Village Fire Dept": "Palmyra",
-    "Rome Vol Fire Co Inc": "Rome",
-    "Rome Fire Dist": "Rome",
-    "Sullivan Fire Dept": "Sullivan",
-    "Sullivan Vol Fire Dept": "Sullivan",
+    # Rome and Sullivan are fire-only — excluded from EMS analysis
     "Waterloo Fire Dept": "Waterloo",
     "Watertown Fire Dept": "Watertown",
     "WESTERN LAKES FIRE DIST": "Western Lakes",
@@ -97,7 +94,6 @@ SERVICE_LEVEL = {
     "Cambridge":"ALS", "Western Lakes":"ALS",
     "Waterloo":"AEMT",
     "Palmyra":"BLS", "Ixonia":"BLS", "Helenville":"BLS", "Lake Mills":"BLS",
-    "Rome":"N/A", "Sullivan":"N/A",
 }
 
 # ── Load all NFIRS data ──────────────────────────────────────────────────────
@@ -131,7 +127,7 @@ ems_rt = ems[ems["RT"].between(0, 60)].copy()
 print(f"EMS calls: {len(ems)}, with valid RT: {len(ems_rt)}")
 
 # ── Exclude fire-only depts ──────────────────────────────────────────────────
-EXCLUDE_DEPTS = ["Rome", "Sullivan", "Helenville"]  # fire-only or minimal data
+EXCLUDE_DEPTS = ["Helenville"]  # minimal data — Rome/Sullivan fire-only already excluded via NAME_MAP
 ems_active = ems[~ems["Department"].isin(EXCLUDE_DEPTS)].copy()
 ems_rt_active = ems_rt[~ems_rt["Department"].isin(EXCLUDE_DEPTS)].copy()
 

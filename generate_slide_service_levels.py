@@ -5,7 +5,7 @@ across Jefferson County municipalities. White background for UW slides.
 import plotly.graph_objects as go
 
 # ── Data from ALS_LEVELS in dashboard ─────────────────────────────────────
-# 13 EMS providers (excluding Rome & Sullivan which are fire-only)
+# 13 EMS providers. Rome and Sullivan are fire-only and not EMS providers.
 service_levels = {
     "ALS (Advanced Life Support)": [
         "Watertown", "Fort Atkinson", "Whitewater", "Jefferson",

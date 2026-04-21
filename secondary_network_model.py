@@ -22,6 +22,7 @@ Date:   March 2026
 """
 
 import os
+import sys
 import json
 import numpy as np
 import pandas as pd
@@ -32,6 +33,10 @@ import warnings
 warnings.filterwarnings("ignore")
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Jefferson-only mode — reads _jeffco inputs, writes _jeffco outputs
+JEFFCO_MODE = "--jeffco" in sys.argv
+OUTPUT_SUFFIX = "_jeffco" if JEFFCO_MODE else ""
 
 # Reuse solvers from pareto_facility.py
 from pareto_facility import (
@@ -53,7 +58,7 @@ SERVICE_AREA_POP = {
 # ── Load Phase 1 results ───────────────────────────────────────────────
 def load_secondary_demand():
     """Load concurrent call results and compute secondary demand per department."""
-    csv = os.path.join(SCRIPT_DIR, "concurrent_call_results.csv")
+    csv = os.path.join(SCRIPT_DIR, f"concurrent_call_results{OUTPUT_SUFFIX}.csv")
     df = pd.read_csv(csv)
     return df
 
@@ -254,7 +259,7 @@ def plot_solution_map(sol, candidates, bg_demand, demand_weights,
     ax.set_aspect("equal")
     plt.tight_layout()
 
-    fname = f"secondary_network_map_K{k}{label}.png"
+    fname = f"secondary_network_map_K{k}{label}{OUTPUT_SUFFIX}.png"
     fpath = os.path.join(SCRIPT_DIR, fname)
     plt.savefig(fpath, dpi=150, bbox_inches="tight")
     plt.close()
@@ -360,10 +365,11 @@ def plot_diminishing_returns(results_summary):
     )
     plt.tight_layout()
 
-    fpath = os.path.join(SCRIPT_DIR, "secondary_network_diminishing_returns.png")
+    dname = f"secondary_network_diminishing_returns{OUTPUT_SUFFIX}.png"
+    fpath = os.path.join(SCRIPT_DIR, dname)
     plt.savefig(fpath, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"  Saved: secondary_network_diminishing_returns.png")
+    print(f"  Saved: {dname}")
 
 
 def build_allocation_table(best_sol, bg_demand, demand_weights, time_matrix, candidates):
@@ -409,9 +415,10 @@ def build_allocation_table(best_sol, bg_demand, demand_weights, time_matrix, can
         })
 
     alloc = pd.DataFrame(rows).sort_values("Secondary_Demand", ascending=False)
-    fpath = os.path.join(SCRIPT_DIR, "secondary_allocation_table.csv")
+    aname = f"secondary_allocation_table{OUTPUT_SUFFIX}.csv"
+    fpath = os.path.join(SCRIPT_DIR, aname)
     alloc.to_csv(fpath, index=False)
-    print(f"  Saved: secondary_allocation_table.csv ({len(alloc)} BGs)")
+    print(f"  Saved: {aname} ({len(alloc)} BGs)")
     return alloc
 
 
@@ -473,9 +480,10 @@ def main():
         summary_rows.append(row)
 
     summary_df = pd.DataFrame(summary_rows)
-    csv_path = os.path.join(SCRIPT_DIR, "secondary_network_solutions.csv")
+    csv_name = f"secondary_network_solutions{OUTPUT_SUFFIX}.csv"
+    csv_path = os.path.join(SCRIPT_DIR, csv_name)
     summary_df.to_csv(csv_path, index=False)
-    print(f"\n  Saved: secondary_network_solutions.csv")
+    print(f"\n  Saved: {csv_name}")
     print()
     print(summary_df[["K", "Objective", "T", "Avg_RT", "Max_RT",
                        "Demand_Pct_Covered"]].to_string(index=False))

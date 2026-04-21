@@ -62,7 +62,7 @@ departments = pd.DataFrame([
     # Note: Helenville has no ambulances — served by Jefferson EMS. Included for geographic coverage.
     {"Dept": "Helenville",    "FT":  0, "PT": 13, "EMS_Calls":  None,"Total_Calls":  None,"Pop":  1500, "Expense":   None,  "Model": "Volunteer",   "Level": "BLS",  "Ambulances": 0, "Lat": 43.0135, "Lon": -88.6998, "Cross_County": False, "Cross_Note": "Interior — no ambulance; EMS served by Jefferson"},
     # Western Lakes: multi-county (Waukesha primary), small Jeff Co. footprint
-    {"Dept": "Western Lakes", "FT":  0, "PT":  0, "EMS_Calls":  None,"Total_Calls":  None,"Pop":  2974, "Expense":   None,  "Model": "Career+PT",   "Level": "ALS",  "Ambulances": 0, "Lat": 43.0110, "Lon": -88.5877, "Cross_County": True,  "Cross_Note": "Primary base in Waukesha Co.; serves Sullivan/Rome in Jeff Co."},
+    {"Dept": "Western Lakes", "FT":  0, "PT":  0, "EMS_Calls":  None,"Total_Calls":  None,"Pop":  2974, "Expense":   None,  "Model": "Career+PT",   "Level": "ALS",  "Ambulances": 0, "Lat": 43.0110, "Lon": -88.5877, "Cross_County": True,  "Cross_Note": "Primary base in Waukesha Co.; serves Sullivan/Concord towns in Jeff Co."},
 ])
 
 # ==============================================================================

@@ -24,12 +24,13 @@ DEPT_TO_NAMELSAD = {
     "Watertown":     ["Watertown city", "Watertown town"],
     "Lake Mills":    ["Lake Mills city", "Lake Mills town"],
     "Cambridge":     ["Cambridge village"],
-    "Rome":          ["Cold Spring town", "Sumner town"],
-    "Sullivan":      ["Sullivan town", "Sullivan village"],
     "Jefferson":     ["Jefferson city", "Jefferson town", "Hebron town"],
-    "Western Lakes": ["Oakland town", "Concord town"],
-    "Fort Atkinson": ["Fort Atkinson city", "Koshkonong town"],
-    "Whitewater":    ["Whitewater city"],
+    # Sullivan town + village are fire-only served by Sullivan VFD; EMS by Western Lakes.
+    "Western Lakes": ["Oakland town", "Concord town", "Sullivan town", "Sullivan village"],
+    # Sumner town shared w/ Edgerton; Fort Atkinson has larger pop share
+    "Fort Atkinson": ["Fort Atkinson city", "Koshkonong town", "Sumner town"],
+    # Cold Spring town was formerly under Rome VFD (fire-only); EMS by Whitewater
+    "Whitewater":    ["Whitewater city", "Cold Spring town"],
     "Palmyra":       ["Palmyra village", "Palmyra town"],
     "Edgerton":      [],
     "Helenville":    [],
@@ -53,8 +54,6 @@ STATIONS = {
     "Johnson Creek": (43.0819, -88.7759,    636),
     "Lake Mills":    (43.0783, -88.9113,      0),  # No NFIRS data submitted
     "Palmyra":       (42.8778, -88.5862,     35),
-    "Rome":          (42.9315, -88.6270,     71),
-    "Sullivan":      (42.9640, -88.5810,     97),
     "Waterloo":      (43.1815, -88.9904,    520),
     "Watertown":     (43.1959, -88.7235,   2719),
     "Western Lakes": (43.0295, -88.5968,   6581),
@@ -74,8 +73,6 @@ DEPT_COLORS = {
     "Johnson Creek": "#b07aa1",  # purple
     "Lake Mills":    "#ff9da7",  # pink
     "Palmyra":       "#9c755f",  # brown
-    "Rome":          "#bab0ac",  # warm grey
-    "Sullivan":      "#86bcb6",  # light teal
     "Waterloo":      "#8cd17d",  # light green
     "Watertown":     "#a0cbe8",  # light blue
     "Western Lakes": "#d4a6c8",  # lavender

@@ -52,8 +52,7 @@ DEPT_NAME_MAP = {
     "Palmyra Village Fire Dept": "Palmyra",
     "CAMBRIDGE COMM FIRE DEPT": "Cambridge",
     "Western Lake Fire District": "Western Lakes",
-    "Rome Fire Dist": "Rome",
-    "Sullivan Vol Fire Dept": "Sullivan",
+    # Rome and Sullivan are fire-only — excluded from EMS analysis
     "Lake Mills Fire Dept": "Lake Mills",
     "Helenville Fire Dept": "Helenville",
     "Helenville Vol Fire Co": "Helenville",
@@ -64,8 +63,6 @@ DEPT_NAME_MAP = {
     "WESTERN LAKES FIRE DIST": "Western Lakes",
     "Ixonia Fire Dept": "Ixonia",
     "Palmyra Fire Dept": "Palmyra",
-    "Rome Vol Fire Co Inc": "Rome",
-    "Sullivan Fire Dept": "Sullivan",
     "Whitewater Fire Dept": "Whitewater",
 }
 

@@ -1,0 +1,4 @@
+Scenario,K,Total_Operating,Total_Revenue,Net_Cost,Total_FTE,Cost_Per_Station,Coverage_Model,Notes
+A: All 3 stations 24/7 ALS,3,2150454,1398600,751854,21.6,250618,24/7,"3 × Peterson model ($716K operating, $466K revenue = $250K net each)"
+B: All 3 stations peak-only (08-20),3,1547636,909090,638546,14.4,212849,Peak 12hr,"Salary × 2/3, fixed costs same, revenue × 0.65 (peak call share)"
+C: Hybrid — 1 × 24/7 + 2 × peak-only,3,1748575,1072260,676315,16.8,225438,Hybrid,"Central station 24/7 ($250K net), others peak-only"

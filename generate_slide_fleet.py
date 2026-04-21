@@ -17,9 +17,7 @@ data = [
     ("Cambridge",           9,   0),
     ("Johnson Creek",       8,   2),
     ("Ixonia",              6,   1),
-    ("Sullivan",            6,   0),
     ("Helenville",          6,   0),
-    ("Rome",                6,   0),
     ("Palmyra",             4,   1),
     ("Western Lakes",       0,   0),
 ]
