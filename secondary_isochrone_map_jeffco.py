@@ -1,13 +1,13 @@
 """
-ORS isochrone response-time map for the Jefferson-only secondary ambulance
-network (K=2 and K=3 MCLP T=14 solutions from secondary_network_solutions_jeffco.csv).
+ORS isochrone response-time maps for Jefferson County secondary ambulance network.
+
+Modes (pass as CLI arg):
+  --jeffco        K=2,3  MCLP T=14  from secondary_network_solutions_jeffco.csv
+  --total-demand  K=3,4  P-Median   from secondary_network_solutions_totaldemand.csv
+  (default)       K=2,3  MCLP T=14  from secondary_network_solutions.csv
 
 Fetches real road-network drive-time polygons from OpenRouteService at
-8 / 14 / 20 min thresholds, cached to isochrone_cache/SEC_jeffco_K{k}_{i}.json.
-
-Outputs:
-  - secondary_isochrone_map_K2_jeffco.png
-  - secondary_isochrone_map_K3_jeffco.png
+8 / 14 / 20 min thresholds, cached to isochrone_cache/SEC_{mode}_K{k}_{i}.json.
 """
 
 import os, sys, json, time, requests
@@ -25,6 +25,26 @@ warnings.filterwarnings("ignore")
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CACHE_DIR  = os.path.join(SCRIPT_DIR, "isochrone_cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
+
+# Mode selection
+TOTAL_DEMAND_MODE = "--total-demand" in sys.argv
+JEFFCO_MODE       = "--jeffco"       in sys.argv
+
+if TOTAL_DEMAND_MODE:
+    MODE_SUFFIX   = "totaldemand"
+    SOLUTIONS_CSV = os.path.join(SCRIPT_DIR, "secondary_network_solutions_totaldemand.csv")
+    K_VALUES      = [3, 4]
+    USE_PMED      = True    # P-Median is the primary objective for total-demand
+elif JEFFCO_MODE:
+    MODE_SUFFIX   = "jeffco"
+    SOLUTIONS_CSV = os.path.join(SCRIPT_DIR, "secondary_network_solutions_jeffco.csv")
+    K_VALUES      = [2, 3]
+    USE_PMED      = False
+else:
+    MODE_SUFFIX   = "jeffco"
+    SOLUTIONS_CSV = os.path.join(SCRIPT_DIR, "secondary_network_solutions_jeffco.csv")
+    K_VALUES      = [2, 3]
+    USE_PMED      = False
 
 # Load ORS key from .env
 env_path = os.path.join(SCRIPT_DIR, ".env")
@@ -71,7 +91,7 @@ ZONE_LABELS = {2: ["South", "North"], 3: ["South", "Central", "North"]}
 
 
 def fetch_isochrone(cache_id, lat, lon):
-    cache_file = os.path.join(CACHE_DIR, f"SEC_jeffco_{cache_id}.json")
+    cache_file = os.path.join(CACHE_DIR, f"SEC_{MODE_SUFFIX}_{cache_id}.json")
     if os.path.exists(cache_file):
         with open(cache_file) as f:
             return json.load(f)
@@ -128,13 +148,16 @@ def parse_stations(row):
 
 
 def build_map(k, solutions, concurrent):
-    sol = solutions[
-        (solutions["K"] == k) &
-        (solutions["Objective"] == "MCLP") &
-        (solutions["T"].astype(str) == "14")
-    ]
+    if USE_PMED:
+        sol = solutions[(solutions["K"] == k) & (solutions["Objective"] == "PMed")]
+    else:
+        sol = solutions[
+            (solutions["K"] == k) &
+            (solutions["Objective"] == "MCLP") &
+            (solutions["T"].astype(str) == "14")
+        ]
     if sol.empty:
-        print(f"  No MCLP T=14 solution for K={k}, skipping.")
+        print(f"  No solution for K={k}, skipping.")
         return
     sol = sol.iloc[0]
     sec_pts = parse_stations(sol)
@@ -252,13 +275,16 @@ def build_map(k, solutions, concurrent):
     ax.tick_params(labelsize=9)
     ax.set_aspect("equal")
 
+    obj_label = ("P-Median (minimize avg RT)" if USE_PMED else "MCLP T=14 min")
+    demand_label = ("Total call volume — Megan 2026-04-19 auth" if TOTAL_DEMAND_MODE
+                    else "Jefferson-only concurrent events")
     ax.set_title(
         f"Jefferson County EMS — Regional Secondary Ambulance Network  (K={k} Stations)\n"
-        f"ORS Road-Network Drive-Time Coverage  |  Jefferson-Only Call Volume  |  CY2024",
-        fontsize=13, fontweight="bold", pad=14
+        f"ORS Road-Network Drive-Time Coverage  |  {obj_label}  |  {demand_label}  |  CY2024",
+        fontsize=12, fontweight="bold", pad=14
     )
 
-    out = os.path.join(SCRIPT_DIR, f"secondary_isochrone_map_K{k}_jeffco.png")
+    out = os.path.join(SCRIPT_DIR, f"secondary_isochrone_map_K{k}_{MODE_SUFFIX}.png")
     fig.savefig(out, dpi=160, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     print(f"  Saved: {os.path.basename(out)}")
@@ -266,9 +292,14 @@ def build_map(k, solutions, concurrent):
 
 def main():
     solutions  = pd.read_csv(SOLUTIONS_CSV)
-    concurrent = pd.read_csv(CONCURRENT_CSV)
-    for k in (2, 3):
-        print(f"\n>> Building K={k} isochrone map...")
+    # Concurrent CSV only needed for secondary-demand callout annotations
+    conc_path = os.path.join(SCRIPT_DIR, f"concurrent_call_results_{MODE_SUFFIX}.csv")
+    if not os.path.exists(conc_path):
+        conc_path = os.path.join(SCRIPT_DIR, "concurrent_call_results_jeffco.csv")
+    concurrent = pd.read_csv(conc_path) if os.path.exists(conc_path) else pd.DataFrame()
+
+    for k in K_VALUES:
+        print(f"\n>> Building K={k} isochrone map ({MODE_SUFFIX})...")
         build_map(k, solutions, concurrent)
     print("\nDone.")
 

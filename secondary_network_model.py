@@ -35,8 +35,18 @@ warnings.filterwarnings("ignore")
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Jefferson-only mode — reads _jeffco inputs, writes _jeffco outputs
-JEFFCO_MODE = "--jeffco" in sys.argv
-OUTPUT_SUFFIX = "_jeffco" if JEFFCO_MODE else ""
+JEFFCO_MODE    = "--jeffco"       in sys.argv
+# Total-demand mode — weights BGs by full call volume (Megan auth totals),
+# not concurrent/secondary events. Answers: "minimize RT across all calls"
+# instead of "maximize secondary coverage". Writes _totaldemand outputs.
+TOTAL_DEMAND_MODE = "--total-demand" in sys.argv
+
+if TOTAL_DEMAND_MODE:
+    OUTPUT_SUFFIX = "_totaldemand"
+elif JEFFCO_MODE:
+    OUTPUT_SUFFIX = "_jeffco"
+else:
+    OUTPUT_SUFFIX = ""
 
 # Reuse solvers from pareto_facility.py
 from pareto_facility import (
@@ -114,6 +124,54 @@ def allocate_demand_to_bgs(secondary_df, bg_demand, pop_weights):
     print(f"  Total secondary demand allocated to BGs: {demand_weights.sum():.0f} events")
     print(f"  BGs with demand > 0: {(demand_weights > 0).sum()} / {n_bg}")
 
+    return demand_weights
+
+
+def allocate_total_demand_to_bgs(bg_demand, pop_weights):
+    """
+    Distribute Megan's authoritative total call volume (AUTH_EMS_CALLS) across
+    block groups proportional to each BG's population share within its nearest
+    department's service area.
+
+    This answers: "where do EMS calls actually happen across the county?"
+    — using the full 8,396 call total, not just concurrent/secondary events.
+    Demand weights then drive P-Median to minimize average response time
+    county-wide rather than maximizing coverage of overflow events.
+    """
+    from jefferson_geo_filter import AUTHORITATIVE_2024 as AUTH_EMS_CALLS
+
+    from math import radians, sin, cos, sqrt, atan2
+    def haversine(lat1, lon1, lat2, lon2):
+        R = 3958.8
+        lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+        dlat, dlon = lat2 - lat1, lon2 - lon1
+        a = sin(dlat/2)**2 + cos(lat1)*cos(lat2)*sin(dlon/2)**2
+        return 2 * R * atan2(sqrt(a), sqrt(1-a))
+
+    n_bg = len(bg_demand)
+    demand_weights = np.zeros(n_bg, dtype=float)
+
+    for j, bg in enumerate(bg_demand):
+        bg_lat, bg_lon = bg["lat"], bg["lon"]
+        bg_pop = pop_weights[j]
+
+        # Assign BG to nearest existing station
+        best_dist, best_dept = float("inf"), None
+        for sta in EXISTING_STATIONS:
+            d = haversine(bg_lat, bg_lon, sta["lat"], sta["lon"])
+            if d < best_dist:
+                best_dist = d
+                best_dept = sta["name"]
+
+        if best_dept and best_dept in AUTH_EMS_CALLS:
+            dept_pop  = SERVICE_AREA_POP.get(best_dept, 1)
+            dept_calls = AUTH_EMS_CALLS[best_dept]
+            demand_weights[j] = dept_calls * (bg_pop / dept_pop) if dept_pop > 0 else 0
+
+    demand_weights = np.maximum(demand_weights, 0)
+    print(f"  Total call demand allocated to BGs: {demand_weights.sum():.0f} calls")
+    print(f"  County AUTH total: {sum(AUTH_EMS_CALLS.values()):,}  |  "
+          f"BGs with demand > 0: {(demand_weights > 0).sum()} / {n_bg}")
     return demand_weights
 
 
@@ -424,14 +482,13 @@ def build_allocation_table(best_sol, bg_demand, demand_weights, time_matrix, can
 
 # ── Main ───────────────────────────────────────────────────────────────
 def main():
+    mode_label = ("TOTAL-DEMAND (Megan auth calls)" if TOTAL_DEMAND_MODE
+                  else "JEFFCO-ONLY (concurrent events)" if JEFFCO_MODE
+                  else "ALL-DISTRICT (concurrent events)")
     print("=" * 70)
-    print("JEFFERSON COUNTY EMS — SECONDARY AMBULANCE NETWORK DESIGN")
+    print(f"JEFFERSON COUNTY EMS — SECONDARY AMBULANCE NETWORK DESIGN")
+    print(f"Mode: {mode_label}")
     print("=" * 70)
-
-    # Load data
-    print("\n>> Loading Phase 1 secondary demand...")
-    sec_df = load_secondary_demand()
-    print(sec_df[["Dept", "Secondary_Events", "Pct_Concurrent"]].to_string(index=False))
 
     print("\n>> Loading facility location data...")
     candidates = load_candidates()
@@ -445,9 +502,16 @@ def main():
         return
     print(f"  Matrix: {tm.shape}")
 
-    # Allocate demand to BGs
-    print("\n>> Allocating secondary demand to block groups...")
-    demand_weights = allocate_demand_to_bgs(sec_df, bg_demand, pop_weights)
+    # Allocate demand to BGs — method depends on mode
+    if TOTAL_DEMAND_MODE:
+        print("\n>> Allocating TOTAL call demand to block groups (Megan 2026-04-19 auth)...")
+        demand_weights = allocate_total_demand_to_bgs(bg_demand, pop_weights)
+    else:
+        print("\n>> Loading Phase 1 secondary demand...")
+        sec_df = load_secondary_demand()
+        print(sec_df[["Dept", "Secondary_Events", "Pct_Concurrent"]].to_string(index=False))
+        print("\n>> Allocating secondary demand to block groups...")
+        demand_weights = allocate_demand_to_bgs(sec_df, bg_demand, pop_weights)
 
     # Solve for K=2..5
     print("\n>> Solving secondary network placement...")

@@ -343,6 +343,18 @@ xl = pd.ExcelFile(COMPARE_XL)
 comparison   = xl.parse("Comparison")          # FIX 9: loaded but previously unused
 muni_kpi     = xl.parse("Jeff_Municipal_Breakdown")
 rt_pct       = xl.parse("Jeff_Response_Percentiles")
+
+# ── Exclude fire-only departments from EMS provider tables ────────────────────
+# Rome Fire District and Sullivan VFD are FIRE-ONLY — they operate no ambulances.
+# EMS in those areas is provided by Western Lakes Fire Department.
+# Their rows appear in the Excel sheets because NFIRS records list them as the
+# responding department for fire apparatus that assisted at EMS incidents.
+# Keeping them in muni_kpi / rt_pct would imply they are EMS providers, which
+# is factually incorrect. Geographic/map references (Town of Sullivan, ZIP 53178)
+# are unaffected — only EMS provider listings are excluded here.
+_EMS_FIRE_ONLY = {"Rome", "Sullivan"}
+muni_kpi = muni_kpi[~muni_kpi["Municipality"].isin(_EMS_FIRE_ONLY)].reset_index(drop=True)
+rt_pct   = rt_pct[~rt_pct["Municipality"].isin(_EMS_FIRE_ONLY)].reset_index(drop=True)
 call_types   = xl.parse("Jeff_Call_Types")
 portage_vol  = xl.parse("Portage_Call_Volume_Trend")
 portage_rev  = xl.parse("Portage_Revenue_Trend")
