@@ -468,6 +468,147 @@ textbox(s5, Inches(0.5), Inches(7.2), Inches(12.3), Inches(0.3),
 
 
 # =========================================================
+# SLIDE 5b — The Business Case (Peterson-anchored cost model)
+# =========================================================
+s5b = prs.slides.add_slide(BLANK)
+
+textbox(s5b, Inches(0.5), Inches(0.3), Inches(12.3), Inches(0.8),
+        "The Business Case: Same Spend, Dramatically Better Care",
+        size=30, bold=True, color=NAVY, align=PP_ALIGN.CENTER)
+textbox(s5b, Inches(0.5), Inches(1.1), Inches(12.3), Inches(0.5),
+        "Built on Chief Peterson's 24/7 ALS single-unit cost model "
+        "(6 FTEs, 24/48 schedule, 700 calls/yr)",
+        size=13, italic=True, color=GRAY, align=PP_ALIGN.CENTER)
+
+# ---- TODAY panel (left) — the diagnostic baseline ----
+rounded_rect(s5b, Inches(0.5), Inches(1.9), Inches(4.0), Inches(4.5),
+             fill=RED_BG, line_color=RED, line_width=2.0)
+
+textbox(s5b, Inches(0.5), Inches(2.05), Inches(4.0), Inches(0.5),
+        "TODAY — Fragmented",
+        size=18, bold=True, color=RED, align=PP_ALIGN.CENTER)
+
+textbox(s5b, Inches(0.65), Inches(2.6), Inches(3.7), Inches(0.4),
+        "Current distributed overhead",
+        size=12, color=GRAY)
+
+textbox(s5b, Inches(0.65), Inches(2.95), Inches(3.7), Inches(0.9),
+        "$2.36M",
+        size=48, bold=True, color=RED)
+
+textbox(s5b, Inches(0.65), Inches(3.85), Inches(3.7), Inches(0.4),
+        "per year, across 7 departments",
+        size=12, italic=True, color=GRAY)
+
+# Divider line
+line = s5b.shapes.add_connector(2, Inches(0.7), Inches(4.35),
+                                 Inches(4.3), Inches(4.35))
+line.line.color.rgb = DIVIDER
+line.line.width = Pt(1.0)
+
+multiline_textbox(s5b, Inches(0.7), Inches(4.5), Inches(3.6), Inches(1.8), [
+    {"text": "What that buys today:", "size": 11, "bold": True,
+     "color": GRAY, "space_after": 6},
+    {"text": "• 12 independent backup ambulances",
+     "size": 11, "color": NAVY, "space_after": 3},
+    {"text": "• 10–15% utilization per unit",
+     "size": 11, "color": NAVY, "space_after": 3},
+    {"text": "• 41 all-busy gaps per year",
+     "size": 11, "color": RED, "bold": True, "space_after": 3},
+    {"text": "• Only 32% of concurrent demand covered ≤14 min",
+     "size": 11, "color": NAVY, "space_after": 0},
+])
+
+# ---- ARROW ----
+add_arrow(s5b, Inches(4.7), Inches(4.0), Inches(5.1), Inches(4.0),
+          color=NAVY, width=4.0)
+textbox(s5b, Inches(4.4), Inches(3.5), Inches(0.9), Inches(0.4),
+        "Same\nbudget",
+        size=11, bold=True, italic=True, color=NAVY, align=PP_ALIGN.CENTER,
+        line_spacing=1.1)
+
+# ---- TOMORROW panel (right) — 3 scenarios, Peterson-anchored ----
+rounded_rect(s5b, Inches(5.3), Inches(1.9), Inches(7.55), Inches(4.5),
+             fill=BLUE_BG, line_color=BLUE, line_width=2.0)
+
+textbox(s5b, Inches(5.3), Inches(2.05), Inches(7.55), Inches(0.5),
+        "TOMORROW — Regional (K=4)",
+        size=18, bold=True, color=BLUE, align=PP_ALIGN.CENTER)
+
+# 3 scenario cards across, scaled from Peterson's $250K-net single-unit model
+scenarios = [
+    {"name": "Scenario A", "mode": "All 4 stations 24/7 ALS",
+     "op": "$2.87M", "rev": "$1.86M", "net": "$1.00M",
+     "fte": "29 FTE",
+     "note": "Maximum coverage.\nHigher cost; delivers ≤14-min\ncoverage to 75% of demand."},
+    {"name": "Scenario B", "mode": "All 4 peak-only (8 AM–8 PM)",
+     "op": "$2.06M", "rev": "$1.21M", "net": "$851K",
+     "fte": "19 FTE",
+     "note": "Peak-hour focus — covers\n90% of call volume during\nthe 12-hour daytime window."},
+    {"name": "Scenario C", "mode": "Hybrid: 1×24/7 + 3×peak",
+     "op": "$2.33M", "rev": "$1.43M", "net": "$902K",
+     "fte": "22 FTE",
+     "note": "Recommended balance.\n24/7 anchor + peak-only\ncoverage where demand spikes."},
+]
+
+card_w_in = 2.35
+card_gap_in = 0.12
+card_top = Inches(2.65)
+card_h_in = 3.55
+start_x_in = 5.3 + 0.12
+for i, sc in enumerate(scenarios):
+    cx = Inches(start_x_in + i * (card_w_in + card_gap_in))
+    is_rec = sc["name"] == "Scenario C"
+    border = GREEN if is_rec else BLUE
+    bw = 2.5 if is_rec else 1.2
+    rounded_rect(s5b, cx, card_top, Inches(card_w_in), Inches(card_h_in),
+                 fill=WHITE, line_color=border, line_width=bw)
+    # Scenario name
+    textbox(s5b, cx, card_top + Inches(0.1), Inches(card_w_in), Inches(0.35),
+            sc["name"], size=13, bold=True, color=border, align=PP_ALIGN.CENTER)
+    # Mode
+    textbox(s5b, cx, card_top + Inches(0.45), Inches(card_w_in), Inches(0.5),
+            sc["mode"], size=10, italic=True, color=GRAY, align=PP_ALIGN.CENTER,
+            line_spacing=1.15)
+    # Net cost (big)
+    textbox(s5b, cx, card_top + Inches(1.05), Inches(card_w_in), Inches(0.55),
+            sc["net"], size=26, bold=True, color=border, align=PP_ALIGN.CENTER)
+    textbox(s5b, cx, card_top + Inches(1.60), Inches(card_w_in), Inches(0.3),
+            "net / year", size=10, italic=True, color=GRAY, align=PP_ALIGN.CENTER)
+    # Op / Rev breakdown
+    multiline_textbox(s5b, cx + Inches(0.05), card_top + Inches(1.95),
+                      Inches(card_w_in - 0.1), Inches(0.7), [
+        {"text": f"Operating: {sc['op']}", "size": 10, "color": GRAY,
+         "space_after": 2},
+        {"text": f"Revenue:  {sc['rev']}", "size": 10, "color": GRAY,
+         "space_after": 2},
+        {"text": sc["fte"], "size": 10, "bold": True, "color": NAVY,
+         "space_after": 0},
+    ], align=PP_ALIGN.CENTER)
+    # Note
+    textbox(s5b, cx + Inches(0.1), card_top + Inches(2.7),
+            Inches(card_w_in - 0.2), Inches(0.8), sc["note"],
+            size=9, italic=True, color=GRAY, align=PP_ALIGN.CENTER,
+            line_spacing=1.2)
+    # "Recommended" chip for Scenario C
+    if is_rec:
+        textbox(s5b, cx, card_top - Inches(0.28), Inches(card_w_in), Inches(0.3),
+                "★ RECOMMENDED", size=10, bold=True, color=GREEN,
+                align=PP_ALIGN.CENTER)
+
+# Bottom takeaway strip
+textbox(s5b, Inches(0.5), Inches(6.55), Inches(12.3), Inches(0.6),
+        "The hybrid regional network costs ≈ $900K net — within the envelope "
+        "the county already spends on fragmented backup.",
+        size=14, bold=True, italic=True, color=NAVY, align=PP_ALIGN.CENTER,
+        line_spacing=1.2)
+
+add_footer(s5b,
+    "Source: Chief Peterson 24/7 ALS cost projection (6 FTEs, 700 calls/yr) "
+    "scaled to K=4 · Current distributed overhead estimated from 7-dept staffing data")
+
+
+# =========================================================
 # SLIDE 6 — Thank You + Call to Action
 # =========================================================
 s6 = prs.slides.add_slide(BLANK)

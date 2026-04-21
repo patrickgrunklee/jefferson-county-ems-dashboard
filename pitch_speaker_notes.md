@@ -10,10 +10,11 @@
 | Slide | Content | Time | Running |
 |---|---|---:|---:|
 | 1 | Hook + team | 0:25 | 0:25 |
-| 2 | The Bottleneck | 0:55 | 1:20 |
-| 3 | The IE Intervention | 1:20 | 2:40 |
-| 4 | Before vs. After | 0:50 | 3:30 |
-| 5 | The Bottom Line | 0:25 | 3:55 |
+| 2 | The Bottleneck | 0:50 | 1:15 |
+| 3 | The IE Intervention | 1:10 | 2:25 |
+| 4 | Before vs. After | 0:45 | 3:10 |
+| 5 | The Bottom Line (care) | 0:20 | 3:30 |
+| 5b | The Business Case | 0:25 | 3:55 |
 | 6 | Call to Action | 0:05 | 4:00 |
 
 Target: land at **4:00** on the dot. If you start drifting long on Slide 3, cut the methodology acronym explanation and move on — the map tells the story.
@@ -101,6 +102,24 @@ Target: land at **4:00** on the dot. If you start drifting long on Slide 3, cut 
 
 ---
 
+## SLIDE 5b — The Business Case (0:25)
+*(Image: `pitch_slide_5b` — 3 scenario cards anchored to Peterson's model)*
+
+> **"And here's the business case. Today the county collectively spends about $2.4 million a year on fragmented secondary backup — across 12 independent departments."**
+>
+> **"Using Chief Peterson's own 24/7 ALS cost projection as our anchor, the hybrid regional model — one 24/7 station plus three peak-only stations — comes in at roughly $900 thousand net per year."**
+>
+> **"That's the same envelope the county already spends. But instead of 12 half-empty systems, it buys 75% coverage, 5.8 minutes faster response, and it closes the all-busy gap."**
+
+**Delivery notes:**
+- Lead with the anchor: **"Chief Peterson's own cost projection"** — this disarms skepticism because it's their number, not ours.
+- Hit the three numbers: **$2.4M today → $900K hybrid regional** — same envelope, better care.
+- Do NOT say "savings." Say **"same spend, better care"** or **"within the envelope the county already spends."**
+- If a shark interrupts with "where's the savings?" — repeat: *"We're not selling savings. We're showing that dramatically better coverage is achievable without asking for more money."*
+- Bridge to Slide 6: **"So here's what we're asking for."**
+
+---
+
 ## SLIDE 6 — Call to Action (0:05)
 *(Contact + QR)*
 
@@ -117,7 +136,10 @@ Target: land at **4:00** on the dot. If you start drifting long on Slide 3, cut 
 > A: "Forced consolidation isn't on the table politically, and it isn't necessary. Our model keeps every primary ambulance local — departments retain their autonomy, their revenue, and their fire service funding. We're adding a shared safety net, not taking anything away."
 
 **Q: "Where's the ROI in dollars?"**
-> A: "Today the county's 12 departments collectively spend about $2.4 million a year on distributed secondary capacity — that's the diagnostic cost of the current fragmentation. The regional model is roughly cost-neutral. The return isn't in dollars saved; it's in response-time minutes gained and coverage gaps closed. For EMS, those minutes translate directly to patient outcomes."
+> A: "Today the county's 12 departments collectively spend about $2.4 million a year on distributed secondary capacity — that's the diagnostic cost of the current fragmentation. The regional model, built on Chief Peterson's own cost projection, comes in around $900K net per year for the hybrid scenario. Same envelope. The return isn't in dollars saved; it's in response-time minutes gained and coverage gaps closed."
+
+**Q: "Walk me through the cost math — how did you get to $900K?"**
+> A: "Chief Peterson built a 24/7 ALS cost model for a single station: $716K operating, $466K in EMS revenue, $250K net per station. We scaled that to 4 stations and modeled three coverage mixes. Scenario A is all four 24/7 at about $1M net. Scenario B is all peak-only at $851K. Scenario C, our recommended hybrid — one 24/7 anchor plus three peak-only — lands at $902K net with 22 FTEs. All three are below the $2.36M the county already spends on fragmented capacity."
 
 **Q: "How do you know four stations is the right number?"**
 > A: "We ran K=2 through K=6. Two stations covers 64% of demand — too thin. Six hits diminishing returns. Four is the elbow of the curve: 75% covered, 10.8 minute average response, and staffing that fits within plausible county-levy funding. We have the sensitivity analysis in the backup slides."
@@ -139,7 +161,9 @@ Target: land at **4:00** on the dot. If you start drifting long on Slide 3, cut 
 - [ ] Slide 1 hook memorized word-for-word
 - [ ] Slide 5 "Time / Quality / Coverage" memorized word-for-word
 - [ ] Can say "P-Median" and "Erlang-C" without stumbling
-- [ ] Have the $2.4M / 17 FTE numbers memorized for Q&A
+- [ ] Have the Peterson model numbers memorized: $716K op / $466K rev / $250K net per station
+- [ ] Have the scenario totals memorized: A=$1.00M, B=$851K, C=$902K (recommended)
+- [ ] Memorize the $2.36M baseline and the "same envelope" framing
 - [ ] Laptop in airplane mode or screen saver disabled
 - [ ] Backup: PDF copy of deck on a second device
 
