@@ -1,0 +1,241 @@
+Dept,Hour,Calls
+Cambridge,0,1
+Cambridge,1,2
+Cambridge,2,3
+Cambridge,3,1
+Cambridge,4,2
+Cambridge,5,2
+Cambridge,6,1
+Cambridge,7,1
+Cambridge,8,5
+Cambridge,9,4
+Cambridge,10,2
+Cambridge,11,5
+Cambridge,12,6
+Cambridge,13,1
+Cambridge,14,1
+Cambridge,15,2
+Cambridge,16,5
+Cambridge,17,5
+Cambridge,18,3
+Cambridge,19,4
+Cambridge,20,4
+Cambridge,21,1
+Cambridge,22,3
+Cambridge,23,0
+Edgerton,0,51
+Edgerton,1,35
+Edgerton,2,47
+Edgerton,3,33
+Edgerton,4,41
+Edgerton,5,49
+Edgerton,6,59
+Edgerton,7,71
+Edgerton,8,84
+Edgerton,9,128
+Edgerton,10,124
+Edgerton,11,123
+Edgerton,12,107
+Edgerton,13,132
+Edgerton,14,114
+Edgerton,15,128
+Edgerton,16,111
+Edgerton,17,101
+Edgerton,18,86
+Edgerton,19,117
+Edgerton,20,78
+Edgerton,21,89
+Edgerton,22,57
+Edgerton,23,70
+Fort Atkinson,0,37
+Fort Atkinson,1,36
+Fort Atkinson,2,32
+Fort Atkinson,3,33
+Fort Atkinson,4,29
+Fort Atkinson,5,38
+Fort Atkinson,6,35
+Fort Atkinson,7,68
+Fort Atkinson,8,95
+Fort Atkinson,9,94
+Fort Atkinson,10,92
+Fort Atkinson,11,98
+Fort Atkinson,12,88
+Fort Atkinson,13,101
+Fort Atkinson,14,97
+Fort Atkinson,15,57
+Fort Atkinson,16,97
+Fort Atkinson,17,82
+Fort Atkinson,18,82
+Fort Atkinson,19,86
+Fort Atkinson,20,77
+Fort Atkinson,21,74
+Fort Atkinson,22,54
+Fort Atkinson,23,39
+Ixonia,0,4
+Ixonia,1,7
+Ixonia,2,5
+Ixonia,3,5
+Ixonia,4,4
+Ixonia,5,6
+Ixonia,6,10
+Ixonia,7,12
+Ixonia,8,13
+Ixonia,9,10
+Ixonia,10,17
+Ixonia,11,17
+Ixonia,12,16
+Ixonia,13,13
+Ixonia,14,8
+Ixonia,15,15
+Ixonia,16,17
+Ixonia,17,19
+Ixonia,18,15
+Ixonia,19,10
+Ixonia,20,11
+Ixonia,21,10
+Ixonia,22,8
+Ixonia,23,8
+Jefferson,0,0
+Jefferson,1,1
+Jefferson,2,0
+Jefferson,3,2
+Jefferson,4,2
+Jefferson,5,2
+Jefferson,6,3
+Jefferson,7,1
+Jefferson,8,3
+Jefferson,9,3
+Jefferson,10,2
+Jefferson,11,4
+Jefferson,12,8
+Jefferson,13,4
+Jefferson,14,9
+Jefferson,15,12
+Jefferson,16,9
+Jefferson,17,6
+Jefferson,18,6
+Jefferson,19,3
+Jefferson,20,5
+Jefferson,21,1
+Jefferson,22,3
+Jefferson,23,2
+Johnson Creek,0,8
+Johnson Creek,1,8
+Johnson Creek,2,4
+Johnson Creek,3,11
+Johnson Creek,4,8
+Johnson Creek,5,9
+Johnson Creek,6,18
+Johnson Creek,7,23
+Johnson Creek,8,23
+Johnson Creek,9,29
+Johnson Creek,10,19
+Johnson Creek,11,19
+Johnson Creek,12,28
+Johnson Creek,13,23
+Johnson Creek,14,24
+Johnson Creek,15,19
+Johnson Creek,16,23
+Johnson Creek,17,33
+Johnson Creek,18,30
+Johnson Creek,19,30
+Johnson Creek,20,21
+Johnson Creek,21,15
+Johnson Creek,22,21
+Johnson Creek,23,8
+Palmyra,0,1
+Palmyra,1,2
+Palmyra,2,2
+Palmyra,3,0
+Palmyra,4,0
+Palmyra,5,1
+Palmyra,6,1
+Palmyra,7,1
+Palmyra,8,0
+Palmyra,9,0
+Palmyra,10,2
+Palmyra,11,5
+Palmyra,12,3
+Palmyra,13,1
+Palmyra,14,1
+Palmyra,15,2
+Palmyra,16,2
+Palmyra,17,2
+Palmyra,18,2
+Palmyra,19,3
+Palmyra,20,0
+Palmyra,21,0
+Palmyra,22,0
+Palmyra,23,1
+Waterloo,0,10
+Waterloo,1,9
+Waterloo,2,6
+Waterloo,3,8
+Waterloo,4,6
+Waterloo,5,5
+Waterloo,6,8
+Waterloo,7,15
+Waterloo,8,13
+Waterloo,9,28
+Waterloo,10,14
+Waterloo,11,24
+Waterloo,12,25
+Waterloo,13,15
+Waterloo,14,24
+Waterloo,15,29
+Waterloo,16,34
+Waterloo,17,20
+Waterloo,18,33
+Waterloo,19,15
+Waterloo,20,18
+Waterloo,21,13
+Waterloo,22,14
+Waterloo,23,17
+Watertown,0,58
+Watertown,1,40
+Watertown,2,42
+Watertown,3,38
+Watertown,4,39
+Watertown,5,40
+Watertown,6,58
+Watertown,7,82
+Watertown,8,95
+Watertown,9,121
+Watertown,10,113
+Watertown,11,115
+Watertown,12,92
+Watertown,13,114
+Watertown,14,98
+Watertown,15,88
+Watertown,16,102
+Watertown,17,114
+Watertown,18,96
+Watertown,19,115
+Watertown,20,110
+Watertown,21,71
+Watertown,22,59
+Watertown,23,47
+Whitewater,0,47
+Whitewater,1,53
+Whitewater,2,44
+Whitewater,3,40
+Whitewater,4,30
+Whitewater,5,32
+Whitewater,6,34
+Whitewater,7,48
+Whitewater,8,64
+Whitewater,9,74
+Whitewater,10,85
+Whitewater,11,70
+Whitewater,12,67
+Whitewater,13,78
+Whitewater,14,62
+Whitewater,15,75
+Whitewater,16,75
+Whitewater,17,83
+Whitewater,18,76
+Whitewater,19,69
+Whitewater,20,74
+Whitewater,21,61
+Whitewater,22,56
+Whitewater,23,51
